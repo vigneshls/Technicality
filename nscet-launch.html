@@ -1,0 +1,955 @@
+<title>NSCET Launch</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@300;400;600;700&family=Sora:wght@300;400;500;600&display=swap">
+
+<style>
+  :root {
+    --bg: #080C18;
+    --surface: #0E1424;
+    --blue: #1B4B8A;
+    --cyan: #3DC8E0;
+    --green: #2BA36E;
+    --cream: #E4E0DB;
+    --muted: #5B6B8A;
+    --bright: #F4F2EF;
+    --font-display: 'Crimson Pro', Georgia, 'Times New Roman', serif;
+    --font-body: 'Sora', system-ui, -apple-system, sans-serif;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--cream);
+    font-family: var(--font-body);
+    overflow: hidden;
+    height: 100vh;
+    width: 100vw;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    pointer-events: none;
+    opacity: 0.02;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  #netCanvas {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+  }
+
+  .vignette {
+    position: fixed;
+    inset: 0;
+    background: radial-gradient(ellipse at center, transparent 35%, rgba(8,12,24,0.8) 100%);
+    z-index: 1;
+    pointer-events: none;
+  }
+
+  .scan-line {
+    position: fixed;
+    top: -2px;
+    left: 0;
+    width: 100%;
+    height: 1px;
+    background: linear-gradient(90deg, transparent 10%, rgba(61,200,224,0.25) 50%, transparent 90%);
+    z-index: 6;
+    pointer-events: none;
+    animation: scanDown 10s linear infinite;
+    opacity: 0.5;
+  }
+
+  @keyframes scanDown {
+    from { top: -2px; }
+    to { top: 100vh; }
+  }
+
+  .light-sweep {
+    position: fixed;
+    inset: 0;
+    z-index: 5;
+    pointer-events: none;
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(61, 200, 224, 0.04) 35%,
+      rgba(61, 200, 224, 0.08) 50%,
+      rgba(61, 200, 224, 0.04) 65%,
+      transparent 100%
+    );
+    transform: translateX(-120%);
+    opacity: 0;
+  }
+
+  .light-sweep.sweeping {
+    opacity: 1;
+    animation: sweepAcross 0.7s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  }
+
+  @keyframes sweepAcross {
+    from { transform: translateX(-120%); }
+    to { transform: translateX(120%); }
+  }
+
+  /* --- Scene System --- */
+  .scene {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 2;
+    opacity: 0;
+    transform: scale(0.97);
+    transition: opacity 0.9s cubic-bezier(0.4, 0, 0.2, 1),
+                transform 0.9s cubic-bezier(0.4, 0, 0.2, 1);
+    pointer-events: none;
+    padding: 2rem;
+  }
+
+  .scene.active {
+    opacity: 1;
+    transform: scale(1);
+    pointer-events: auto;
+    z-index: 3;
+  }
+
+  .scene.exiting {
+    opacity: 0;
+    transform: scale(1.03);
+    z-index: 2;
+  }
+
+  .reveal {
+    opacity: 0;
+    transform: translateY(22px);
+    transition: opacity 0.7s cubic-bezier(0.4, 0, 0.2, 1),
+                transform 0.7s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .reveal.shown { opacity: 1; transform: translateY(0); }
+
+  .accent { color: var(--cyan); }
+
+  /* --- Scene 0: Institution Reveal --- */
+  .inst-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  .shield-logo {
+    position: relative;
+    width: 120px;
+    height: 140px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .shield-glow {
+    position: absolute;
+    width: 280%;
+    height: 280%;
+    top: -90%;
+    left: -90%;
+    background: radial-gradient(circle, rgba(61,200,224,0.1) 0%, transparent 50%);
+    animation: shieldPulse 4s ease-in-out infinite;
+    pointer-events: none;
+  }
+
+  @keyframes shieldPulse {
+    0%, 100% { transform: scale(0.8); opacity: 0.3; }
+    50% { transform: scale(1.1); opacity: 1; }
+  }
+
+  .shield-shape {
+    position: absolute;
+    inset: 0;
+  }
+
+  .shield-shape::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    clip-path: polygon(50% 0%, 100% 12%, 100% 65%, 50% 100%, 0% 65%, 0% 12%);
+    background: linear-gradient(160deg, var(--cyan), var(--blue));
+  }
+
+  .shield-shape::after {
+    content: '';
+    position: absolute;
+    inset: 3px;
+    clip-path: polygon(50% 0%, 100% 12%, 100% 65%, 50% 100%, 0% 65%, 0% 12%);
+    background: var(--bg);
+  }
+
+  .shield-logo svg {
+    position: relative;
+    z-index: 1;
+    color: var(--cyan);
+  }
+
+  .inst-name {
+    font-family: var(--font-display);
+    font-size: clamp(2.8rem, 7vw, 5rem);
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-align: center;
+    line-height: 1;
+    background: linear-gradient(135deg, var(--bright), var(--cyan));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .inst-full {
+    font-family: var(--font-body);
+    font-size: clamp(0.6rem, 1.3vw, 0.85rem);
+    font-weight: 300;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--muted);
+    text-align: center;
+    max-width: 480px;
+    line-height: 1.6;
+  }
+
+  .inst-loc {
+    font-size: 0.7rem;
+    font-weight: 300;
+    color: rgba(91, 107, 138, 0.6);
+    letter-spacing: 0.1em;
+    margin-top: 0.3rem;
+  }
+
+  /* --- Scene 1: Vision --- */
+  .vision-main {
+    font-family: var(--font-display);
+    font-size: clamp(2rem, 5vw, 3.8rem);
+    font-weight: 300;
+    text-align: center;
+    line-height: 1.3;
+    text-wrap: balance;
+    max-width: 750px;
+  }
+
+  .vision-sub {
+    font-family: var(--font-display);
+    font-size: clamp(1.3rem, 3vw, 2.2rem);
+    font-weight: 300;
+    text-align: center;
+    color: var(--muted);
+    line-height: 1.4;
+    margin-top: 0.6rem;
+    text-wrap: balance;
+    max-width: 650px;
+  }
+
+  .vision-note {
+    font-size: 0.78rem;
+    font-weight: 300;
+    color: rgba(91, 107, 138, 0.6);
+    margin-top: 2rem;
+    letter-spacing: 0.05em;
+  }
+
+  /* --- Scene 2: Stats --- */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 2.5rem;
+    max-width: 720px;
+    width: 100%;
+  }
+
+  .stat-tile {
+    text-align: center;
+    padding: 0.5rem;
+  }
+
+  .stat-value {
+    font-family: var(--font-display);
+    font-size: clamp(2.2rem, 5vw, 3.5rem);
+    font-weight: 700;
+    color: var(--cyan);
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .stat-label {
+    font-size: 0.7rem;
+    font-weight: 400;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-top: 0.6rem;
+  }
+
+  .stats-eyebrow {
+    font-size: 0.7rem;
+    font-weight: 500;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--cyan);
+    margin-bottom: 2.5rem;
+  }
+
+  /* --- Scene 3: Departments --- */
+  .dept-heading {
+    font-family: var(--font-display);
+    font-size: clamp(1.6rem, 3.5vw, 2.6rem);
+    font-weight: 300;
+    margin-bottom: 2.5rem;
+    text-align: center;
+    text-wrap: balance;
+  }
+
+  .dept-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.7rem;
+    max-width: 420px;
+    width: 100%;
+  }
+
+  .dept-item {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+    font-size: 0.88rem;
+    font-weight: 300;
+    color: var(--cream);
+    opacity: 0;
+    transform: translateX(-16px);
+    transition: opacity 0.5s cubic-bezier(0.4, 0, 0.2, 1),
+                transform 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .dept-item.shown { opacity: 1; transform: translateX(0); }
+
+  .dept-bar {
+    width: 20px;
+    height: 2px;
+    background: var(--cyan);
+    flex-shrink: 0;
+    opacity: 0.6;
+  }
+
+  .dept-affl {
+    font-size: 0.72rem;
+    color: rgba(91, 107, 138, 0.6);
+    margin-top: 2rem;
+    font-weight: 300;
+    letter-spacing: 0.04em;
+  }
+
+  /* --- Scene 4: Campus --- */
+  .campus-heading {
+    font-family: var(--font-display);
+    font-size: clamp(1.6rem, 3.5vw, 2.6rem);
+    font-weight: 300;
+    margin-bottom: 2.5rem;
+    text-align: center;
+    text-wrap: balance;
+  }
+
+  .campus-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 2rem 2.5rem;
+    max-width: 600px;
+    width: 100%;
+  }
+
+  .campus-item {
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.6rem;
+  }
+
+  .campus-icon {
+    width: 40px;
+    height: 40px;
+    color: var(--cyan);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .campus-item span {
+    font-size: 0.78rem;
+    font-weight: 400;
+    color: var(--cream);
+  }
+
+  .campus-more {
+    font-size: 0.72rem;
+    color: rgba(91, 107, 138, 0.6);
+    margin-top: 2rem;
+    font-weight: 300;
+    letter-spacing: 0.04em;
+    text-align: center;
+  }
+
+  /* --- Scene 5: CTA --- */
+  .cta-headline {
+    font-family: var(--font-display);
+    font-size: clamp(1.6rem, 4vw, 2.8rem);
+    font-weight: 300;
+    text-align: center;
+    text-wrap: balance;
+    max-width: 600px;
+    line-height: 1.3;
+  }
+
+  .cta-url {
+    display: block;
+    font-family: var(--font-display);
+    font-size: clamp(1.8rem, 4.5vw, 3rem);
+    font-weight: 700;
+    margin: 1.2rem 0 2.2rem;
+    text-align: center;
+    text-decoration: none;
+    letter-spacing: 0.02em;
+    background: linear-gradient(135deg, var(--bright), var(--cyan));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    transition: filter 0.3s ease;
+  }
+
+  .cta-url:hover { filter: brightness(1.2); }
+
+  .cta-button {
+    display: inline-block;
+    font-family: var(--font-body);
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: var(--bg);
+    background: linear-gradient(135deg, var(--cyan), var(--green));
+    padding: 0.85rem 2.8rem;
+    border: none;
+    border-radius: 2px;
+    text-decoration: none;
+    letter-spacing: 0.06em;
+    cursor: pointer;
+    transition: transform 0.2s ease, box-shadow 0.3s ease;
+  }
+
+  .cta-button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 35px rgba(61, 200, 224, 0.3);
+  }
+
+  .cta-button.shown {
+    animation: ctaPulse 2.5s ease-in-out infinite;
+  }
+
+  @keyframes ctaPulse {
+    0%, 100% { box-shadow: 0 4px 15px rgba(61, 200, 224, 0.15); }
+    50% { box-shadow: 0 6px 30px rgba(61, 200, 224, 0.3); }
+  }
+
+  .cta-badges {
+    margin-top: 2.2rem;
+    font-size: 0.68rem;
+    color: var(--muted);
+    font-weight: 400;
+    letter-spacing: 0.08em;
+    text-align: center;
+  }
+
+  /* --- Progress Bar --- */
+  .progress-bar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 2px;
+    background: rgba(91, 107, 138, 0.12);
+    z-index: 10;
+  }
+
+  .progress-fill {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, var(--blue), var(--cyan));
+    will-change: width;
+  }
+
+  /* --- Controls --- */
+  .skip-btn {
+    position: fixed;
+    top: 1.5rem;
+    right: 1.5rem;
+    z-index: 10;
+    background: rgba(8, 12, 24, 0.6);
+    border: 1px solid rgba(91, 107, 138, 0.2);
+    color: var(--muted);
+    font-family: var(--font-body);
+    font-size: 0.65rem;
+    font-weight: 400;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    padding: 0.4rem 0.9rem;
+    cursor: pointer;
+    transition: color 0.2s, border-color 0.2s;
+    border-radius: 2px;
+  }
+
+  .skip-btn:hover { color: var(--cream); border-color: var(--cyan); }
+
+  .controls {
+    position: fixed;
+    bottom: 1.2rem;
+    right: 1.2rem;
+    z-index: 10;
+  }
+
+  .ctrl-btn {
+    background: rgba(8, 12, 24, 0.6);
+    border: 1px solid rgba(91, 107, 138, 0.2);
+    color: var(--muted);
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 1.1rem;
+    transition: color 0.2s, border-color 0.2s;
+    border-radius: 2px;
+  }
+
+  .ctrl-btn:hover { color: var(--cream); border-color: var(--cyan); }
+
+  .skip-btn:focus-visible,
+  .ctrl-btn:focus-visible,
+  .cta-button:focus-visible,
+  .cta-url:focus-visible {
+    outline: 2px solid var(--cyan);
+    outline-offset: 3px;
+  }
+
+  /* --- Responsive --- */
+  @media (max-width: 640px) {
+    .stats-grid { grid-template-columns: repeat(2, 1fr); gap: 1.8rem; }
+    .campus-grid { grid-template-columns: repeat(2, 1fr); gap: 1.5rem; }
+    .scene { padding: 1.5rem; }
+  }
+
+  @media (max-width: 400px) {
+    .stats-grid { gap: 1.2rem; }
+  }
+
+  /* --- Reduced Motion --- */
+  @media (prefers-reduced-motion: reduce) {
+    .scene { transition: opacity 0.3s ease; transform: none !important; }
+    .scene.active, .scene.exiting { transform: none !important; }
+    .reveal { transition: opacity 0.3s ease; transform: none !important; }
+    .reveal.shown { transform: none !important; }
+    .dept-item { transition: opacity 0.3s ease; transform: none !important; }
+    .dept-item.shown { transform: none !important; }
+    .shield-glow { animation: none; opacity: 0.5; }
+    .cta-button.shown { animation: none; box-shadow: 0 4px 15px rgba(61,200,224,0.2); }
+    .light-sweep, .scan-line { display: none; }
+  }
+</style>
+
+<canvas id="netCanvas"></canvas>
+<div class="vignette"></div>
+<div class="scan-line"></div>
+<div class="light-sweep" id="lightSweep"></div>
+
+<div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+<button class="skip-btn" id="skipBtn" aria-label="Skip to end">SKIP</button>
+
+<!-- Scene 0: Institution Reveal -->
+<div class="scene" id="scene0">
+  <div class="inst-wrap">
+    <div class="shield-logo reveal" data-delay="300">
+      <div class="shield-glow"></div>
+      <div class="shield-shape"></div>
+      <svg viewBox="0 0 48 48" width="44" height="44" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M24 12L6 22L24 32L42 22Z" fill="currentColor" opacity="0.2"/>
+        <path d="M24 12L6 22L24 32L42 22Z"/>
+        <path d="M13 25V34L24 40L35 34V25"/>
+        <line x1="40" y1="22" x2="40" y2="35"/>
+        <circle cx="40" cy="36.5" r="1.5" fill="currentColor"/>
+      </svg>
+    </div>
+    <h1 class="inst-name reveal" data-delay="900">NSCET</h1>
+    <p class="inst-full reveal" data-delay="1500">Nadar Saraswathi College of Engineering &amp; Technology</p>
+    <p class="inst-loc reveal" data-delay="2100">Theni, Tamil Nadu &middot; Est. 2010</p>
+  </div>
+</div>
+
+<!-- Scene 1: Vision -->
+<div class="scene" id="scene1">
+  <p class="vision-main reveal" data-delay="200">Moulding <span class="accent">Outstanding Engineers</span></p>
+  <p class="vision-sub reveal" data-delay="900">as Responsible Citizens &amp; Dynamic Professionals</p>
+  <p class="vision-note reveal" data-delay="1800">A beacon of quality education promoting innovation and excellence</p>
+</div>
+
+<!-- Scene 2: By The Numbers -->
+<div class="scene" id="scene2">
+  <p class="stats-eyebrow reveal" data-delay="100">By the numbers</p>
+  <div class="stats-grid">
+    <div class="stat-tile reveal" data-delay="400">
+      <div class="stat-value" data-counter="2010" data-from="2000">2010</div>
+      <div class="stat-label">Established</div>
+    </div>
+    <div class="stat-tile reveal" data-delay="700">
+      <div class="stat-value" data-counter="21" data-from="0">21</div>
+      <div class="stat-label">Acre Campus</div>
+    </div>
+    <div class="stat-tile reveal" data-delay="1000">
+      <div class="stat-value no-counter">A</div>
+      <div class="stat-label">NAAC Grade</div>
+    </div>
+    <div class="stat-tile reveal" data-delay="1300">
+      <div class="stat-value" data-counter="7" data-from="0">7</div>
+      <div class="stat-label">Departments</div>
+    </div>
+  </div>
+</div>
+
+<!-- Scene 3: Departments -->
+<div class="scene" id="scene3">
+  <h2 class="dept-heading reveal" data-delay="200">Departments of <span class="accent">Excellence</span></h2>
+  <div class="dept-list">
+    <div class="dept-item" data-delay="600"><span class="dept-bar"></span>Computer Science &amp; Engineering</div>
+    <div class="dept-item" data-delay="850"><span class="dept-bar"></span>Artificial Intelligence &amp; Data Science</div>
+    <div class="dept-item" data-delay="1100"><span class="dept-bar"></span>Information Technology</div>
+    <div class="dept-item" data-delay="1350"><span class="dept-bar"></span>Electronics &amp; Communication Engineering</div>
+    <div class="dept-item" data-delay="1600"><span class="dept-bar"></span>Electrical &amp; Electronics Engineering</div>
+    <div class="dept-item" data-delay="1850"><span class="dept-bar"></span>Mechanical Engineering</div>
+    <div class="dept-item" data-delay="2100"><span class="dept-bar"></span>Civil Engineering</div>
+  </div>
+  <p class="dept-affl reveal" data-delay="2800">Affiliated to Anna University, Chennai</p>
+</div>
+
+<!-- Scene 4: Campus & Infrastructure -->
+<div class="scene" id="scene4">
+  <h2 class="campus-heading reveal" data-delay="200">World-Class <span class="accent">Infrastructure</span></h2>
+  <div class="campus-grid">
+    <div class="campus-item reveal" data-delay="600">
+      <div class="campus-icon">
+        <svg viewBox="0 0 40 40" width="36" height="36" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="4" y="8" width="32" height="22" rx="2"/><line x1="4" y1="14" x2="36" y2="14"/><circle cx="20" cy="22" r="3"/>
+        </svg>
+      </div>
+      <span>Smart Classrooms</span>
+    </div>
+    <div class="campus-item reveal" data-delay="900">
+      <div class="campus-icon">
+        <svg viewBox="0 0 40 40" width="36" height="36" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 34V20L8 16V8H16V16L12 20"/><path d="M28 34V20L24 16V8H32V16L28 20"/><line x1="6" y1="34" x2="34" y2="34"/>
+        </svg>
+      </div>
+      <span>Advanced Labs</span>
+    </div>
+    <div class="campus-item reveal" data-delay="1200">
+      <div class="campus-icon">
+        <svg viewBox="0 0 40 40" width="36" height="36" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M8 10L20 16L32 10V34L20 28L8 34V10Z"/><line x1="20" y1="16" x2="20" y2="28"/>
+        </svg>
+      </div>
+      <span>Digital Library</span>
+    </div>
+    <div class="campus-item reveal" data-delay="1500">
+      <div class="campus-icon">
+        <svg viewBox="0 0 40 40" width="36" height="36" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="20" cy="18" r="8"/><path d="M10 34C10 28 14 24 20 24C26 24 30 28 30 34"/><line x1="20" y1="10" x2="20" y2="26" opacity="0.3"/>
+        </svg>
+      </div>
+      <span>Sports Complex</span>
+    </div>
+    <div class="campus-item reveal" data-delay="1800">
+      <div class="campus-icon">
+        <svg viewBox="0 0 40 40" width="36" height="36" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M6 34V14L20 6L34 14V34"/><rect x="15" y="22" width="10" height="12"/><line x1="6" y1="34" x2="34" y2="34"/>
+        </svg>
+      </div>
+      <span>Modern Hostels</span>
+    </div>
+    <div class="campus-item reveal" data-delay="2100">
+      <div class="campus-icon">
+        <svg viewBox="0 0 40 40" width="36" height="36" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="6" y="12" width="28" height="22" rx="2"/><path d="M6 18H34"/><rect x="14" y="22" width="12" height="6" rx="1"/>
+        </svg>
+      </div>
+      <span>Auditorium</span>
+    </div>
+  </div>
+  <p class="campus-more reveal" data-delay="2800">Transport &middot; Medical Services &middot; Cafeteria &middot; WiFi Campus</p>
+</div>
+
+<!-- Scene 5: CTA -->
+<div class="scene" id="scene5">
+  <p class="cta-headline reveal" data-delay="200">Your Engineering Journey <span class="accent">Starts Here</span></p>
+  <a class="cta-url reveal" data-delay="900" href="http://45.195.159.59" target="_blank" rel="noopener">nscet.org</a>
+  <a class="cta-button reveal" data-delay="1600" href="http://45.195.159.59" target="_blank" rel="noopener">Explore Now</a>
+  <p class="cta-badges reveal" data-delay="2300">AICTE Approved &middot; NAAC 'A' Grade &middot; ISO 9001:2015 &middot; NIRF Ranked</p>
+</div>
+
+<div class="controls">
+  <button class="ctrl-btn" id="replayBtn" title="Replay" aria-label="Replay video">&#8635;</button>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  /* --- Network Graph Particle System --- */
+  function NetworkGraph(canvas) {
+    var self = this;
+    self.canvas = canvas;
+    self.ctx = canvas.getContext('2d');
+    self.nodes = [];
+    self.maxDist = 140;
+
+    self.resize = function () {
+      self.canvas.width = window.innerWidth;
+      self.canvas.height = window.innerHeight;
+    };
+
+    self.makeNode = function (scatter) {
+      return {
+        x: Math.random() * self.canvas.width,
+        y: Math.random() * self.canvas.height,
+        vx: (Math.random() - 0.5) * 0.25,
+        vy: (Math.random() - 0.5) * 0.25,
+        size: Math.random() * 1.8 + 0.6,
+        pulse: Math.random() * Math.PI * 2,
+        pulseV: Math.random() * 0.02 + 0.008,
+        bright: Math.random() > 0.75
+      };
+    };
+
+    self.init = function () {
+      self.resize();
+      window.addEventListener('resize', self.resize);
+      var count = Math.min(55, Math.floor(self.canvas.width / 25));
+      for (var i = 0; i < count; i++) self.nodes.push(self.makeNode(true));
+      self.loop();
+    };
+
+    self.loop = function () {
+      var ctx = self.ctx;
+      var w = self.canvas.width;
+      var h = self.canvas.height;
+      ctx.clearRect(0, 0, w, h);
+
+      var nodes = self.nodes;
+      var md = self.maxDist;
+
+      for (var i = 0; i < nodes.length; i++) {
+        var a = nodes[i];
+        a.x += a.vx;
+        a.y += a.vy;
+        a.pulse += a.pulseV;
+        if (a.x < 0 || a.x > w) a.vx *= -1;
+        if (a.y < 0 || a.y > h) a.vy *= -1;
+        a.x = Math.max(0, Math.min(w, a.x));
+        a.y = Math.max(0, Math.min(h, a.y));
+
+        for (var j = i + 1; j < nodes.length; j++) {
+          var b = nodes[j];
+          var dx = a.x - b.x;
+          var dy = a.y - b.y;
+          var dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < md) {
+            var alpha = (1 - dist / md) * 0.12;
+            ctx.beginPath();
+            ctx.moveTo(a.x, a.y);
+            ctx.lineTo(b.x, b.y);
+            ctx.strokeStyle = 'rgba(61, 200, 224, ' + alpha + ')';
+            ctx.lineWidth = 0.5;
+            ctx.stroke();
+          }
+        }
+      }
+
+      for (var k = 0; k < nodes.length; k++) {
+        var n = nodes[k];
+        var osc = 0.4 + Math.sin(n.pulse) * 0.3;
+        ctx.beginPath();
+        ctx.arc(n.x, n.y, n.size, 0, Math.PI * 2);
+        if (n.bright) {
+          ctx.fillStyle = 'rgba(61, 200, 224, ' + (osc * 0.8) + ')';
+        } else {
+          ctx.fillStyle = 'rgba(27, 75, 138, ' + (osc * 0.6) + ')';
+        }
+        ctx.fill();
+      }
+
+      requestAnimationFrame(self.loop);
+    };
+
+    self.init();
+  }
+
+  /* --- Counter Animation --- */
+  function animateCounter(el, from, to, duration) {
+    var startTime = performance.now();
+    function tick() {
+      var elapsed = performance.now() - startTime;
+      var progress = Math.min(elapsed / duration, 1);
+      var eased = 1 - Math.pow(1 - progress, 3);
+      el.textContent = Math.round(from + (to - from) * eased);
+      if (progress < 1) requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  }
+
+  /* --- Launch Video Timeline --- */
+  function LaunchVideo() {
+    var self = this;
+    self.scenes = Array.from(document.querySelectorAll('.scene'));
+    self.sweep = document.getElementById('lightSweep');
+    self.bar = document.getElementById('progressFill');
+    self.idx = -1;
+    self.timers = [];
+    self.startT = 0;
+    self.raf = null;
+
+    self.tl = [
+      { dur: 4200 },
+      { dur: 4300 },
+      { dur: 5500 },
+      { dur: 5800 },
+      { dur: 5500 },
+      { dur: 6000 }
+    ];
+
+    self.total = 0;
+    for (var i = 0; i < self.tl.length; i++) self.total += self.tl[i].dur;
+
+    self.play = function () {
+      self._clear();
+      self.startT = performance.now();
+      self._progress();
+      self._go(0);
+    };
+
+    self._clear = function () {
+      for (var i = 0; i < self.timers.length; i++) clearTimeout(self.timers[i]);
+      self.timers = [];
+      if (self.raf) cancelAnimationFrame(self.raf);
+      for (var j = 0; j < self.scenes.length; j++) {
+        self.scenes[j].classList.remove('active', 'exiting');
+        var els = self.scenes[j].querySelectorAll('.reveal, .dept-item');
+        for (var k = 0; k < els.length; k++) els[k].classList.remove('shown');
+      }
+      // Reset counters
+      var counters = document.querySelectorAll('[data-counter]');
+      for (var c = 0; c < counters.length; c++) {
+        counters[c].textContent = counters[c].getAttribute('data-from') || '0';
+      }
+      self.idx = -1;
+      self.bar.style.width = '0%';
+    };
+
+    self._go = function (i) {
+      if (i >= self.tl.length) return;
+
+      if (self.idx >= 0) {
+        self.scenes[self.idx].classList.remove('active');
+        self.scenes[self.idx].classList.add('exiting');
+        self._doSweep();
+      }
+
+      self.idx = i;
+      var enter = self.idx > 0 ? 350 : 0;
+      self.timers.push(setTimeout(function () {
+        self.scenes[i].classList.remove('exiting');
+        self.scenes[i].classList.add('active');
+        self._reveal(self.scenes[i]);
+      }, enter));
+
+      if (i < self.tl.length - 1) {
+        self.timers.push(setTimeout(function () { self._go(i + 1); }, self.tl[i].dur));
+      }
+    };
+
+    self._reveal = function (scene) {
+      var els = scene.querySelectorAll('.reveal, .dept-item');
+      for (var i = 0; i < els.length; i++) {
+        (function (el) {
+          var d = parseInt(el.getAttribute('data-delay')) || 0;
+          self.timers.push(setTimeout(function () {
+            el.classList.add('shown');
+            // Trigger counters inside this element
+            var cv = el.querySelector('[data-counter]');
+            if (cv && !cv.classList.contains('no-counter')) {
+              var to = parseInt(cv.getAttribute('data-counter'));
+              var from = parseInt(cv.getAttribute('data-from')) || 0;
+              animateCounter(cv, from, to, 1400);
+            }
+          }, d));
+        })(els[i]);
+      }
+    };
+
+    self._doSweep = function () {
+      self.sweep.classList.remove('sweeping');
+      void self.sweep.offsetWidth;
+      self.sweep.classList.add('sweeping');
+      self.timers.push(setTimeout(function () { self.sweep.classList.remove('sweeping'); }, 750));
+    };
+
+    self._progress = function () {
+      var elapsed = performance.now() - self.startT;
+      var pct = Math.min(100, (elapsed / self.total) * 100);
+      self.bar.style.width = pct + '%';
+      if (pct < 100) {
+        self.raf = requestAnimationFrame(self._progress);
+      }
+    };
+
+    self.skip = function () {
+      self._clear();
+      self.bar.style.width = '100%';
+      var last = self.scenes[self.scenes.length - 1];
+      last.classList.add('active');
+      self._reveal(last);
+      self.idx = self.scenes.length - 1;
+    };
+  }
+
+  /* --- Init --- */
+  var canvas = document.getElementById('netCanvas');
+  new NetworkGraph(canvas);
+
+  var video = new LaunchVideo();
+  var skipBtn = document.getElementById('skipBtn');
+  var replayBtn = document.getElementById('replayBtn');
+
+  setTimeout(function () { video.play(); }, 500);
+
+  skipBtn.addEventListener('click', function () {
+    video.skip();
+    skipBtn.hidden = true;
+  });
+
+  replayBtn.addEventListener('click', function () {
+    skipBtn.hidden = false;
+    video.play();
+  });
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'r' || e.key === 'R') { skipBtn.hidden = false; video.play(); }
+    if (e.key === 'Escape') { video.skip(); skipBtn.hidden = true; }
+  });
+})();
+</script>
