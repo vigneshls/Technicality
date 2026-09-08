@@ -1,0 +1,907 @@
+<title>ReadHive Launch</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,500;0,700&family=Outfit:wght@300;400;500;600&display=swap">
+
+<style>
+  :root {
+    --bg: #0A0806;
+    --gold: #D4A843;
+    --gold-bright: #FFD866;
+    --amber: #E8762D;
+    --cream: #F0E6D3;
+    --muted: #7A6B55;
+    --panel: #16120E;
+    --font-display: 'Cormorant Garamond', Georgia, 'Times New Roman', serif;
+    --font-body: 'Outfit', system-ui, -apple-system, sans-serif;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--cream);
+    font-family: var(--font-body);
+    overflow: hidden;
+    height: 100vh;
+    width: 100vw;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    pointer-events: none;
+    opacity: 0.025;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  #particlesCanvas {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+  }
+
+  .vignette {
+    position: fixed;
+    inset: 0;
+    background: radial-gradient(ellipse at center, transparent 40%, rgba(10,8,6,0.75) 100%);
+    z-index: 1;
+    pointer-events: none;
+  }
+
+  .light-sweep {
+    position: fixed;
+    inset: 0;
+    z-index: 5;
+    pointer-events: none;
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(212, 168, 67, 0.05) 35%,
+      rgba(212, 168, 67, 0.1) 50%,
+      rgba(212, 168, 67, 0.05) 65%,
+      transparent 100%
+    );
+    transform: translateX(-120%);
+    opacity: 0;
+  }
+
+  .light-sweep.sweeping {
+    opacity: 1;
+    animation: sweep 0.7s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  }
+
+  @keyframes sweep {
+    from { transform: translateX(-120%); }
+    to { transform: translateX(120%); }
+  }
+
+  /* --- Scene System --- */
+  .scene {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 2;
+    opacity: 0;
+    transform: scale(0.97);
+    transition: opacity 0.9s cubic-bezier(0.4, 0, 0.2, 1),
+                transform 0.9s cubic-bezier(0.4, 0, 0.2, 1);
+    pointer-events: none;
+    padding: 2rem;
+  }
+
+  .scene.active {
+    opacity: 1;
+    transform: scale(1);
+    pointer-events: auto;
+    z-index: 3;
+  }
+
+  .scene.exiting {
+    opacity: 0;
+    transform: scale(1.03);
+    z-index: 2;
+  }
+
+  .reveal {
+    opacity: 0;
+    transform: translateY(24px);
+    transition: opacity 0.7s cubic-bezier(0.4, 0, 0.2, 1),
+                transform 0.7s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .reveal.shown { opacity: 1; transform: translateY(0); }
+
+  .gold {
+    color: var(--gold);
+    text-shadow: 0 0 24px rgba(212, 168, 67, 0.25);
+  }
+
+  /* --- Scene 0: Logo --- */
+  .logo-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.2rem;
+  }
+
+  .hex-logo {
+    position: relative;
+    width: 130px;
+    height: 130px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .hex-glow {
+    position: absolute;
+    width: 260%;
+    height: 260%;
+    top: -80%;
+    left: -80%;
+    background: radial-gradient(circle, rgba(212,168,67,0.12) 0%, transparent 55%);
+    animation: glowPulse 3.5s ease-in-out infinite;
+    pointer-events: none;
+  }
+
+  @keyframes glowPulse {
+    0%, 100% { transform: scale(0.85); opacity: 0.4; }
+    50% { transform: scale(1.15); opacity: 1; }
+  }
+
+  .hex-shell {
+    position: absolute;
+    inset: 0;
+  }
+
+  .hex-shell::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+    background: linear-gradient(150deg, var(--gold), var(--amber));
+  }
+
+  .hex-shell::after {
+    content: '';
+    position: absolute;
+    inset: 3px;
+    clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+    background: var(--bg);
+  }
+
+  .hex-logo svg {
+    position: relative;
+    z-index: 1;
+    color: var(--gold);
+  }
+
+  .logo-title {
+    font-family: var(--font-display);
+    font-size: clamp(2.5rem, 6vw, 4.5rem);
+    font-weight: 300;
+    letter-spacing: 0.1em;
+    text-align: center;
+    line-height: 1.1;
+    text-wrap: balance;
+  }
+
+  .logo-subtitle {
+    font-family: var(--font-body);
+    font-size: clamp(0.7rem, 1.4vw, 0.95rem);
+    font-weight: 300;
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  .logo-nscet {
+    font-size: 0.7rem;
+    font-weight: 300;
+    color: rgba(122, 107, 85, 0.6);
+    letter-spacing: 0.08em;
+    margin-top: 0.5rem;
+  }
+
+  /* --- Scene 1: Tagline --- */
+  .tagline {
+    font-family: var(--font-display);
+    font-size: clamp(2rem, 5vw, 3.8rem);
+    font-weight: 300;
+    text-align: center;
+    line-height: 1.35;
+    text-wrap: balance;
+    max-width: 720px;
+  }
+
+  .tagline .word {
+    display: inline-block;
+    margin: 0 0.15em;
+  }
+
+  /* --- Scene 2: Problem / Solution --- */
+  .problem-text {
+    font-family: var(--font-display);
+    font-size: clamp(1.5rem, 4vw, 3rem);
+    font-weight: 300;
+    text-align: center;
+    line-height: 1.4;
+    color: var(--muted);
+  }
+
+  .scene-divider {
+    width: 60px;
+    height: 1px;
+    background: var(--gold);
+    margin: 2rem 0;
+    opacity: 0;
+    transform: scaleX(0);
+    transition: opacity 0.6s cubic-bezier(0.4, 0, 0.2, 1),
+                transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .scene-divider.shown { opacity: 1; transform: scaleX(1); }
+
+  .solution-text {
+    font-family: var(--font-display);
+    font-size: clamp(1.8rem, 4.5vw, 3.2rem);
+    font-weight: 500;
+    text-align: center;
+    line-height: 1.3;
+    text-wrap: balance;
+  }
+
+  /* --- Scene 3: Features --- */
+  .features-label {
+    font-size: 0.72rem;
+    font-weight: 500;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--gold);
+    margin-bottom: 2.2rem;
+  }
+
+  .features-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 2.5rem 3rem;
+    max-width: 640px;
+    width: 100%;
+  }
+
+  .feature-card { text-align: center; padding: 0.8rem 0.5rem; }
+
+  .feature-icon {
+    width: 44px;
+    height: 44px;
+    margin: 0 auto 0.9rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--gold);
+  }
+
+  .feature-card h3 {
+    font-family: var(--font-display);
+    font-size: 1.3rem;
+    font-weight: 600;
+    margin-bottom: 0.4rem;
+    line-height: 1.2;
+  }
+
+  .feature-card p {
+    font-size: 0.8rem;
+    font-weight: 300;
+    color: var(--muted);
+    line-height: 1.55;
+  }
+
+  .features-more {
+    font-size: 0.78rem;
+    color: rgba(122, 107, 85, 0.7);
+    margin-top: 2rem;
+    letter-spacing: 0.04em;
+    font-weight: 300;
+    text-align: center;
+  }
+
+  /* --- Scene 4: Community Tiers --- */
+  .tier-heading {
+    font-family: var(--font-display);
+    font-size: clamp(1.8rem, 4vw, 3rem);
+    font-weight: 300;
+    margin-bottom: 2.8rem;
+    text-align: center;
+    text-wrap: balance;
+  }
+
+  .tiers-row {
+    display: flex;
+    gap: 1.2rem;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  .tier-badge {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.55rem;
+    opacity: 0;
+    transform: scale(0.7);
+    transition: opacity 0.5s cubic-bezier(0.4, 0, 0.2, 1),
+                transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  .tier-badge.shown { opacity: 1; transform: scale(1); }
+
+  .tier-hex {
+    width: 52px;
+    height: 52px;
+    clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+    background: var(--panel);
+    transition: background 0.5s ease;
+  }
+
+  .tier-badge.shown .tier-hex {
+    background: linear-gradient(150deg, var(--gold), var(--amber));
+  }
+
+  .tier-badge.golden.shown .tier-hex {
+    background: linear-gradient(150deg, var(--gold-bright), var(--gold));
+    filter: drop-shadow(0 0 14px rgba(255, 216, 102, 0.4));
+  }
+
+  .tier-label {
+    font-size: 0.65rem;
+    font-weight: 400;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+    white-space: nowrap;
+    transition: color 0.5s ease;
+  }
+
+  .tier-badge.shown .tier-label { color: var(--cream); }
+
+  .tier-connector {
+    width: 24px;
+    height: 1px;
+    background: var(--muted);
+    opacity: 0.25;
+    margin-bottom: 1.2rem;
+  }
+
+  .tier-sub {
+    font-size: 0.82rem;
+    color: var(--muted);
+    margin-top: 2.2rem;
+    font-weight: 300;
+  }
+
+  /* --- Scene 5: CTA --- */
+  .cta-free {
+    font-family: var(--font-display);
+    font-size: clamp(1.2rem, 2.5vw, 1.8rem);
+    font-weight: 300;
+    color: var(--muted);
+    letter-spacing: 0.12em;
+  }
+
+  .cta-url {
+    display: block;
+    font-family: var(--font-display);
+    font-size: clamp(2rem, 5vw, 3.5rem);
+    font-weight: 700;
+    color: var(--gold);
+    margin: 1rem 0 2.2rem;
+    letter-spacing: 0.02em;
+    text-align: center;
+    text-decoration: none;
+    text-shadow: 0 0 30px rgba(212, 168, 67, 0.2);
+    transition: text-shadow 0.3s ease;
+  }
+
+  .cta-url:hover {
+    text-shadow: 0 0 40px rgba(212, 168, 67, 0.4);
+  }
+
+  .cta-button {
+    display: inline-block;
+    font-family: var(--font-body);
+    font-size: 0.95rem;
+    font-weight: 500;
+    color: var(--bg);
+    background: linear-gradient(135deg, var(--gold), var(--gold-bright));
+    padding: 0.9rem 2.8rem;
+    border: none;
+    border-radius: 2px;
+    text-decoration: none;
+    letter-spacing: 0.06em;
+    cursor: pointer;
+    transition: transform 0.2s ease, box-shadow 0.3s ease;
+  }
+
+  .cta-button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 35px rgba(212, 168, 67, 0.35);
+  }
+
+  .cta-button.shown {
+    animation: ctaGlow 2.5s ease-in-out infinite;
+  }
+
+  @keyframes ctaGlow {
+    0%, 100% { box-shadow: 0 4px 15px rgba(212, 168, 67, 0.15); }
+    50% { box-shadow: 0 6px 30px rgba(212, 168, 67, 0.35); }
+  }
+
+  .cta-nscet {
+    margin-top: 2.2rem;
+    font-size: 0.75rem;
+    color: rgba(122, 107, 85, 0.6);
+    font-weight: 300;
+    letter-spacing: 0.06em;
+  }
+
+  /* --- Progress Bar --- */
+  .progress-bar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 2px;
+    background: rgba(122, 107, 85, 0.15);
+    z-index: 10;
+  }
+
+  .progress-fill {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, var(--gold), var(--gold-bright));
+    will-change: width;
+  }
+
+  /* --- Controls --- */
+  .skip-btn {
+    position: fixed;
+    top: 1.5rem;
+    right: 1.5rem;
+    z-index: 10;
+    background: rgba(10, 8, 6, 0.6);
+    border: 1px solid rgba(122, 107, 85, 0.25);
+    color: var(--muted);
+    font-family: var(--font-body);
+    font-size: 0.7rem;
+    font-weight: 400;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    padding: 0.45rem 1rem;
+    cursor: pointer;
+    transition: color 0.2s, border-color 0.2s;
+    border-radius: 2px;
+  }
+
+  .skip-btn:hover { color: var(--cream); border-color: var(--gold); }
+
+  .controls {
+    position: fixed;
+    bottom: 1.2rem;
+    right: 1.2rem;
+    z-index: 10;
+  }
+
+  .ctrl-btn {
+    background: rgba(10, 8, 6, 0.6);
+    border: 1px solid rgba(122, 107, 85, 0.25);
+    color: var(--muted);
+    width: 38px;
+    height: 38px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 1.1rem;
+    transition: color 0.2s, border-color 0.2s;
+    border-radius: 2px;
+  }
+
+  .ctrl-btn:hover { color: var(--cream); border-color: var(--gold); }
+
+  .skip-btn:focus-visible,
+  .ctrl-btn:focus-visible,
+  .cta-button:focus-visible,
+  .cta-url:focus-visible {
+    outline: 2px solid var(--gold);
+    outline-offset: 3px;
+  }
+
+  /* --- Responsive --- */
+  @media (max-width: 600px) {
+    .features-grid {
+      grid-template-columns: 1fr;
+      gap: 1.5rem;
+      max-width: 300px;
+    }
+    .tiers-row { gap: 0.8rem; }
+    .tier-connector { display: none; }
+    .scene { padding: 1.5rem; }
+    .tier-hex { width: 44px; height: 44px; }
+  }
+
+  /* --- Reduced Motion --- */
+  @media (prefers-reduced-motion: reduce) {
+    .scene {
+      transition: opacity 0.3s ease;
+      transform: none !important;
+    }
+    .scene.active { transform: none !important; }
+    .scene.exiting { transform: none !important; }
+    .reveal {
+      transition: opacity 0.3s ease;
+      transform: none !important;
+    }
+    .reveal.shown { transform: none !important; }
+    .hex-glow { animation: none; opacity: 0.6; }
+    .cta-button.shown { animation: none; box-shadow: 0 4px 15px rgba(212,168,67,0.2); }
+    .light-sweep { display: none; }
+    .scene-divider { transition: opacity 0.3s ease; transform: scaleX(1) !important; }
+  }
+</style>
+
+<canvas id="particlesCanvas"></canvas>
+<div class="vignette"></div>
+<div class="light-sweep" id="lightSweep"></div>
+
+<div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+
+<button class="skip-btn" id="skipBtn" aria-label="Skip to end">SKIP</button>
+
+<!-- Scene 0: Logo Reveal -->
+<div class="scene" id="scene0">
+  <div class="logo-wrap">
+    <div class="hex-logo reveal" data-delay="300">
+      <div class="hex-glow"></div>
+      <div class="hex-shell"></div>
+      <svg viewBox="0 0 48 48" width="42" height="42" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M8 10L24 16L40 10V38L24 32L8 38V10Z"/>
+        <line x1="24" y1="16" x2="24" y2="32"/>
+      </svg>
+    </div>
+    <h1 class="logo-title reveal" data-delay="900">Read<span class="gold">Hive</span></h1>
+    <p class="logo-subtitle reveal" data-delay="1500">Virtual Library</p>
+    <p class="logo-nscet reveal" data-delay="2100">by NSCET, Theni</p>
+  </div>
+</div>
+
+<!-- Scene 1: Tagline -->
+<div class="scene" id="scene1">
+  <h2 class="tagline">
+    <span class="word reveal" data-delay="200">Books</span>
+    <span class="word reveal" data-delay="420">that</span>
+    <span class="word reveal" data-delay="600">are</span>
+    <span class="word reveal" data-delay="800">worth</span>
+    <span class="word reveal gold" data-delay="1050">your</span>
+    <span class="word reveal gold" data-delay="1250">time.</span>
+  </h2>
+</div>
+
+<!-- Scene 2: Problem / Solution -->
+<div class="scene" id="scene2">
+  <p class="problem-text reveal" data-delay="200">Millions of books.</p>
+  <p class="problem-text reveal" data-delay="1000">One lifetime.</p>
+  <div class="scene-divider" data-delay="2000"></div>
+  <p class="solution-text reveal" data-delay="2400">We curate. <span class="gold">You discover.</span></p>
+</div>
+
+<!-- Scene 3: Features -->
+<div class="scene" id="scene3">
+  <p class="features-label reveal" data-delay="200">What awaits you</p>
+  <div class="features-grid">
+    <div class="feature-card reveal" data-delay="600">
+      <div class="feature-icon">
+        <svg viewBox="0 0 48 48" width="42" height="42" fill="none" stroke="currentColor" stroke-width="1.3">
+          <rect x="7" y="7" width="14" height="14" rx="2"/>
+          <rect x="27" y="7" width="14" height="14" rx="2"/>
+          <rect x="7" y="27" width="14" height="14" rx="2"/>
+          <rect x="27" y="27" width="14" height="14" rx="2"/>
+        </svg>
+      </div>
+      <h3>Curated Collections</h3>
+      <p>Handpicked reads across every genre, from hidden gems to timeless classics</p>
+    </div>
+    <div class="feature-card reveal" data-delay="1800">
+      <div class="feature-icon">
+        <svg viewBox="0 0 48 48" width="42" height="42" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round">
+          <path d="M24 4L28.5 17.5H43L31 27L35.5 41L24 32L12.5 41L17 27L5 17.5H19.5L24 4Z"/>
+        </svg>
+      </div>
+      <h3>AI-Powered Verdicts</h3>
+      <p>Instant, intelligent ratings on any title — no lengthy reviews needed</p>
+    </div>
+    <div class="feature-card reveal" data-delay="3000">
+      <div class="feature-icon">
+        <svg viewBox="0 0 48 48" width="42" height="42" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round">
+          <path d="M24 6L36 13V27L24 34L12 27V13Z"/>
+          <path d="M24 22L36 29V43L24 50L12 43V29Z" opacity="0.35"/>
+        </svg>
+      </div>
+      <h3>The Hive Swears By</h3>
+      <p>Books the community unanimously loves — crowd-verified quality</p>
+    </div>
+    <div class="feature-card reveal" data-delay="4200">
+      <div class="feature-icon">
+        <svg viewBox="0 0 48 48" width="42" height="42" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M8 40L16 28L24 34L34 18L42 8"/>
+          <circle cx="42" cy="8" r="2.5" fill="currentColor"/>
+        </svg>
+      </div>
+      <h3>Track Your Journey</h3>
+      <p>Build your reading list and rise through 10 community tiers</p>
+    </div>
+  </div>
+  <p class="features-more reveal" data-delay="5600">Author Spotlight · Borrow Before You Buy · Barcode Scanner</p>
+</div>
+
+<!-- Scene 4: Community Tiers -->
+<div class="scene" id="scene4">
+  <h2 class="tier-heading reveal" data-delay="200">Rise Through <span class="gold">the Hive</span></h2>
+  <div class="tiers-row">
+    <div class="tier-badge" data-delay="800">
+      <div class="tier-hex"></div>
+      <span class="tier-label">New Bee</span>
+    </div>
+    <div class="tier-connector"></div>
+    <div class="tier-badge" data-delay="1100">
+      <div class="tier-hex"></div>
+      <span class="tier-label">Book Worm</span>
+    </div>
+    <div class="tier-connector"></div>
+    <div class="tier-badge" data-delay="1400">
+      <div class="tier-hex"></div>
+      <span class="tier-label">Page Turner</span>
+    </div>
+    <div class="tier-connector"></div>
+    <div class="tier-badge" data-delay="1700">
+      <div class="tier-hex"></div>
+      <span class="tier-label">Hive Mind</span>
+    </div>
+    <div class="tier-connector"></div>
+    <div class="tier-badge golden" data-delay="2000">
+      <div class="tier-hex"></div>
+      <span class="tier-label">Golden Comb</span>
+    </div>
+  </div>
+  <p class="tier-sub reveal" data-delay="2600">10 tiers of reading mastery</p>
+</div>
+
+<!-- Scene 5: CTA -->
+<div class="scene" id="scene5">
+  <p class="cta-free reveal" data-delay="200">Free. Forever.</p>
+  <a class="cta-url reveal" data-delay="800" href="https://readhive.nscet.org" target="_blank" rel="noopener">readhive.nscet.org</a>
+  <a class="cta-button reveal" data-delay="1500" href="https://readhive.nscet.org" target="_blank" rel="noopener">Start Discovering</a>
+  <p class="cta-nscet reveal" data-delay="2200">An initiative by Nadar Saraswathi College of Engineering &amp; Technology</p>
+</div>
+
+<div class="controls">
+  <button class="ctrl-btn" id="replayBtn" title="Replay" aria-label="Replay video">&#8635;</button>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  /* --- Honeycomb Particle System --- */
+  class HexParticles {
+    constructor(canvas) {
+      this.canvas = canvas;
+      this.ctx = canvas.getContext('2d');
+      this.particles = [];
+      this.resize();
+      window.addEventListener('resize', () => this.resize());
+      var count = Math.min(35, Math.floor(window.innerWidth / 35));
+      for (var i = 0; i < count; i++) this.particles.push(this._make(true));
+      this._loop();
+    }
+
+    resize() {
+      this.canvas.width = window.innerWidth;
+      this.canvas.height = window.innerHeight;
+    }
+
+    _make(scatter) {
+      var colors = ['#D4A843', '#FFD866', '#E8762D', '#7A6B55'];
+      return {
+        x: Math.random() * this.canvas.width,
+        y: scatter ? Math.random() * this.canvas.height : this.canvas.height + Math.random() * 120,
+        size: Math.random() * 18 + 6,
+        speed: Math.random() * 0.35 + 0.12,
+        opacity: Math.random() * 0.1 + 0.02,
+        rot: Math.random() * Math.PI * 2,
+        rotV: (Math.random() - 0.5) * 0.007,
+        wobPhase: Math.random() * Math.PI * 2,
+        wobSpeed: Math.random() * 0.012 + 0.004,
+        wobAmp: Math.random() * 0.35 + 0.08,
+        color: colors[Math.floor(Math.random() * colors.length)]
+      };
+    }
+
+    _hex(x, y, s, r) {
+      var ctx = this.ctx;
+      ctx.beginPath();
+      for (var i = 0; i < 6; i++) {
+        var a = (Math.PI / 3) * i + r;
+        var px = x + s * Math.cos(a), py = y + s * Math.sin(a);
+        i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+      }
+      ctx.closePath();
+    }
+
+    _loop() {
+      var ctx = this.ctx;
+      ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+      for (var i = 0; i < this.particles.length; i++) {
+        var p = this.particles[i];
+        p.y -= p.speed;
+        p.rot += p.rotV;
+        p.wobPhase += p.wobSpeed;
+        p.x += Math.sin(p.wobPhase) * p.wobAmp;
+        if (p.y < -p.size * 3) {
+          var n = this._make(false);
+          for (var k in n) p[k] = n[k];
+        }
+        ctx.save();
+        ctx.globalAlpha = p.opacity;
+        ctx.strokeStyle = p.color;
+        ctx.lineWidth = 1;
+        this._hex(p.x, p.y, p.size, p.rot);
+        ctx.stroke();
+        ctx.restore();
+      }
+      requestAnimationFrame(this._loop.bind(this));
+    }
+  }
+
+  /* --- Launch Video Timeline --- */
+  class LaunchVideo {
+    constructor() {
+      this.scenes = Array.from(document.querySelectorAll('.scene'));
+      this.sweep = document.getElementById('lightSweep');
+      this.bar = document.getElementById('progressFill');
+      this.idx = -1;
+      this.timers = [];
+      this.startT = 0;
+      this.raf = null;
+
+      this.tl = [
+        { dur: 3800 },
+        { dur: 4000 },
+        { dur: 4800 },
+        { dur: 8000 },
+        { dur: 4500 },
+        { dur: 5500 }
+      ];
+
+      this.total = 0;
+      for (var i = 0; i < this.tl.length; i++) this.total += this.tl[i].dur;
+    }
+
+    play() {
+      this._clear();
+      this.startT = performance.now();
+      this._progress();
+      this._go(0);
+    }
+
+    _clear() {
+      for (var i = 0; i < this.timers.length; i++) clearTimeout(this.timers[i]);
+      this.timers = [];
+      if (this.raf) cancelAnimationFrame(this.raf);
+      for (var j = 0; j < this.scenes.length; j++) {
+        this.scenes[j].classList.remove('active', 'exiting');
+        var els = this.scenes[j].querySelectorAll('.reveal, .scene-divider, .tier-badge');
+        for (var k = 0; k < els.length; k++) els[k].classList.remove('shown');
+      }
+      this.idx = -1;
+      this.bar.style.width = '0%';
+    }
+
+    _go(i) {
+      var self = this;
+      if (i >= this.tl.length) return;
+
+      if (this.idx >= 0) {
+        this.scenes[this.idx].classList.remove('active');
+        this.scenes[this.idx].classList.add('exiting');
+        this._sweep();
+      }
+
+      this.idx = i;
+      var enter = this.idx > 0 ? 350 : 0;
+      this.timers.push(setTimeout(function () {
+        self.scenes[i].classList.remove('exiting');
+        self.scenes[i].classList.add('active');
+        self._reveal(self.scenes[i]);
+      }, enter));
+
+      if (i < this.tl.length - 1) {
+        this.timers.push(setTimeout(function () { self._go(i + 1); }, this.tl[i].dur));
+      }
+    }
+
+    _reveal(scene) {
+      var self = this;
+      var els = scene.querySelectorAll('.reveal, .scene-divider, .tier-badge');
+      for (var i = 0; i < els.length; i++) {
+        (function (el) {
+          var d = parseInt(el.getAttribute('data-delay')) || 0;
+          self.timers.push(setTimeout(function () { el.classList.add('shown'); }, d));
+        })(els[i]);
+      }
+    }
+
+    _sweep() {
+      var el = this.sweep;
+      el.classList.remove('sweeping');
+      void el.offsetWidth;
+      el.classList.add('sweeping');
+      var self = this;
+      this.timers.push(setTimeout(function () { el.classList.remove('sweeping'); }, 750));
+    }
+
+    _progress() {
+      var self = this;
+      var elapsed = performance.now() - this.startT;
+      var pct = Math.min(100, (elapsed / this.total) * 100);
+      this.bar.style.width = pct + '%';
+      if (pct < 100) {
+        this.raf = requestAnimationFrame(function () { self._progress(); });
+      }
+    }
+
+    skip() {
+      this._clear();
+      this.bar.style.width = '100%';
+      var last = this.scenes[this.scenes.length - 1];
+      last.classList.add('active');
+      this._reveal(last);
+      this.idx = this.scenes.length - 1;
+    }
+  }
+
+  /* --- Init --- */
+  var canvas = document.getElementById('particlesCanvas');
+  new HexParticles(canvas);
+
+  var video = new LaunchVideo();
+  var skipBtn = document.getElementById('skipBtn');
+  var replayBtn = document.getElementById('replayBtn');
+
+  setTimeout(function () { video.play(); }, 500);
+
+  skipBtn.addEventListener('click', function () {
+    video.skip();
+    skipBtn.hidden = true;
+  });
+
+  replayBtn.addEventListener('click', function () {
+    skipBtn.hidden = false;
+    video.play();
+  });
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'r' || e.key === 'R') {
+      skipBtn.hidden = false;
+      video.play();
+    }
+    if (e.key === 'Escape') {
+      video.skip();
+      skipBtn.hidden = true;
+    }
+  });
+})();
+</script>
