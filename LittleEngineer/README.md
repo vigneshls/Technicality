@@ -33,17 +33,25 @@ matches the build order's instruction to prove the mechanics before art.
   they don't exist yet, so swapping in real audio is just dropping files
   into `res/raw/`. Real vehicle/house sprites still need to replace the
   shapes in `TileCellView`, `HouseRevealView`, and the launcher icon/banner.
-- **Step 9 (emulator verification):** not run. This environment's network
-  policy blocks `dl.google.com`, which is where the Android Gradle Plugin,
-  compileSdk platform, and build-tools are fetched from - so `./gradlew` and
-  an emulator can't be exercised from here. To build:
-  1. Allow `dl.google.com` in this environment's network settings, or
-     open the project on a machine with normal internet access / an
-     existing Android SDK.
-  2. `./gradlew assembleDebug` (the wrapper itself is already checked in
-     and points at Gradle 8.7, which the environment could reach).
-  3. Run on an Android TV emulator (Play Store or Google TV image, API 30+,
-     1920x1080) with D-pad-only input, or side-load onto a real Mi TV 4X.
+- **Step 9 (emulator verification):** partially done. With network access
+  widened and an Android SDK installed (platform-tools, `platforms;android-34`,
+  `build-tools;34.0.0`), `./gradlew assembleDebug` succeeds -- **all Kotlin
+  compiles cleanly, no source errors** -- and `./gradlew lintDebug` also
+  passes clean (remaining lint notices are non-issues: fixed TV orientation
+  is intentional, "missing (Context, AttributeSet) constructor" is expected
+  since every custom view here is built programmatically rather than
+  inflated from XML, plus routine outdated-dependency notices).
+  What's still unverified: an actual emulator/device run. This sandbox has
+  no `/dev/kvm` and no exposed virtualization, so an Android TV emulator
+  would run in full software emulation (if it boots at all) -- not
+  practical here. To finish this step:
+  1. Run on an Android TV emulator (Play Store or Google TV image, API 30+,
+     1920x1080) on a machine with hardware virtualization, D-pad-only
+     input, or side-load `app/build/outputs/apk/debug/app-debug.apk` onto
+     a real Mi TV 4X.
+  2. Actually play through all 7 stages once to confirm focus movement,
+     stage completion, and the Reveal animation behave as designed --
+     compiling clean is not the same as the game being fun/correct to play.
 - A second building type's stage art (bridge/tower) - the loop already
   reuses cleanly via `BuildingType`, but `GameActivity` always passes
   `BuildingType.HOUSE` today.
