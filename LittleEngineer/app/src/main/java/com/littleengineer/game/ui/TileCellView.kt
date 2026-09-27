@@ -37,6 +37,7 @@ class TileCellView(context: Context) : View(context) {
 
     private var scale = 1f
     private val rect = RectF()
+    private val focusRect = RectF()
     private val cornerRadius = 28f
 
     /** Emoji/glyph shown centered on the tile while it holds focus -- the "vehicle cursor". */
@@ -99,7 +100,7 @@ class TileCellView(context: Context) : View(context) {
         canvas.drawRoundRect(rect, cornerRadius, cornerRadius, quietBorderPaint)
 
         if (isFocused) {
-            val focusRect = RectF(pad / 2, pad / 2, width - pad / 2, height - pad / 2)
+            focusRect.set(pad / 2, pad / 2, width - pad / 2, height - pad / 2)
             canvas.drawRoundRect(focusRect, cornerRadius, cornerRadius, borderPaint)
             focusIcon?.let { icon ->
                 val textY = cy - (iconPaint.descent() + iconPaint.ascent()) / 2f
