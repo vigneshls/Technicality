@@ -61,18 +61,31 @@ class SoundManager(private val context: Context) {
     fun playDecorate() = play("sfx_decorate")
     fun playFanfare() = play("sfx_fanfare")
 
+    /** Starts the loop, or resumes it in place if it was only paused (see [pauseBackgroundMusic]). */
     fun startBackgroundMusic() {
-        if (musicPlayer != null) return
+        musicPlayer?.let {
+            try {
+                if (!it.isPlaying) it.start()
+            } catch (t: Throwable) { /* ignore */ }
+            return
+        }
         val resId = rawResId("music_loop")
         if (resId == 0) return
         try {
             musicPlayer = MediaPlayer.create(context, resId)?.apply {
                 isLooping = true
-                setVolume(0.5f, 0.5f)
+                setVolume(0.4f, 0.4f) // kept deliberately soft/background-level, never in front of SFX
                 start()
             }
         } catch (t: Throwable) {
             musicPlayer = null
+        }
+    }
+
+    /** Pauses without losing playback position -- use this across activity onPause/onResume. */
+    fun pauseBackgroundMusic() {
+        musicPlayer?.let {
+            try { if (it.isPlaying) it.pause() } catch (t: Throwable) { /* ignore */ }
         }
     }
 

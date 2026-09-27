@@ -40,8 +40,7 @@ class GameActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         soundManager = SoundManager(this)
-        // No-op until a music_loop raw resource is added in Step 7 (final audio pass).
-        soundManager.startBackgroundMusic()
+        // onResume() below starts/resumes the loop -- always called right after onCreate too.
 
         container = FrameLayout(this).apply {
             setBackgroundColor(Color.parseColor("#4FA8D8"))
@@ -144,6 +143,16 @@ class GameActivity : AppCompatActivity() {
         container.removeAllViews()
         container.addView(view)
         view.startCelebration { soundManager.playFanfare() }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        soundManager.startBackgroundMusic()
+    }
+
+    override fun onPause() {
+        soundManager.pauseBackgroundMusic()
+        super.onPause()
     }
 
     override fun onDestroy() {

@@ -13,6 +13,7 @@ import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import com.littleengineer.game.R
 import com.littleengineer.game.util.GridFocusHelper
+import com.littleengineer.game.util.SoundManager
 
 /**
  * Landing screen (the Leanback launcher entry point). Two big D-pad
@@ -20,8 +21,11 @@ import com.littleengineer.game.util.GridFocusHelper
  */
 class MainMenuActivity : AppCompatActivity() {
 
+    private lateinit var soundManager: SoundManager
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        soundManager = SoundManager(this)
 
         val density = resources.displayMetrics.density
         val root = FrameLayout(this).apply {
@@ -79,5 +83,20 @@ class MainMenuActivity : AppCompatActivity() {
 
         GridFocusHelper.wireVerticalChain(listOf(playButton, townButton))
         root.post { playButton.requestFocus() }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        soundManager.startBackgroundMusic()
+    }
+
+    override fun onPause() {
+        soundManager.pauseBackgroundMusic()
+        super.onPause()
+    }
+
+    override fun onDestroy() {
+        soundManager.release()
+        super.onDestroy()
     }
 }

@@ -14,6 +14,7 @@ import androidx.appcompat.app.AppCompatActivity
 import com.littleengineer.game.R
 import com.littleengineer.game.model.BuildingType
 import com.littleengineer.game.model.GameProgress
+import com.littleengineer.game.util.SoundManager
 
 /**
  * Static "My Town" screen (Step 8): every completed build gets a slot on a
@@ -23,8 +24,11 @@ import com.littleengineer.game.model.GameProgress
  */
 class MyTownActivity : AppCompatActivity() {
 
+    private lateinit var soundManager: SoundManager
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        soundManager = SoundManager(this)
         val density = resources.displayMetrics.density
 
         val root = FrameLayout(this).apply {
@@ -102,5 +106,20 @@ class MyTownActivity : AppCompatActivity() {
 
         setContentView(root)
         root.post { backButton.requestFocus() }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        soundManager.startBackgroundMusic()
+    }
+
+    override fun onPause() {
+        soundManager.pauseBackgroundMusic()
+        super.onPause()
+    }
+
+    override fun onDestroy() {
+        soundManager.release()
+        super.onDestroy()
     }
 }
