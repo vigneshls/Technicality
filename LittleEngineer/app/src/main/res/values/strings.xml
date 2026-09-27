@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Little Engineer</string>
+    <string name="menu_play">BUILD A HOUSE</string>
+    <string name="menu_town">MY TOWN</string>
+    <string name="stage_survey_title">CLEAR THE PLOT!</string>
+    <string name="stage_dig_title">DIG THE FOUNDATION!</string>
+    <string name="stage_pour_title">POUR THE CONCRETE!</string>
+    <string name="stage_bricks_title">BUILD THE WALLS!</string>
+    <string name="stage_roof_title">PICK A ROOF!</string>
+    <string name="stage_decorate_title">DECORATE YOUR HOUSE!</string>
+    <string name="build_another">BUILD ANOTHER</string>
+    <string name="main_menu">MAIN MENU</string>
+    <string name="great_job">GREAT JOB!</string>
+</resources>

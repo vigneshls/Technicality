@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Placeholder: a simple bulldozer-blade-like block. Swap for final mascot art in Step 7. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="@color/brick_yellow"
+        android:pathData="M24,54 L84,54 L84,74 Q84,80 78,80 L30,80 Q24,80 24,74 Z" />
+    <path
+        android:fillColor="@color/tile_obstacle"
+        android:pathData="M38,74 L38,90 L48,90 L48,74 Z" />
+    <path
+        android:fillColor="@color/tile_obstacle"
+        android:pathData="M60,74 L60,90 L70,90 L70,74 Z" />
+    <path
+        android:fillColor="@color/brick_red"
+        android:pathData="M40,28 L68,28 L68,54 L40,54 Z" />
+</vector>

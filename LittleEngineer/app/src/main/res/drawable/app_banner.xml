@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Placeholder TV banner (320x180dp). Swap for final art in Step 7. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="@color/bg_grass" />
+        </shape>
+    </item>
+    <item android:gravity="center" android:width="200dp" android:height="80dp">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/brick_yellow" />
+            <corners android:radius="12dp" />
+        </shape>
+    </item>
+</layer-list>
