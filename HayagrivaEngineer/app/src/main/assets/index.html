@@ -1,0 +1,1398 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Hayagriva - The Engineer</title>
+<style>
+  @font-face {
+    font-family: 'Baloo 2';
+    font-style: normal;
+    font-weight: 600 800;
+    src: url('fonts/baloo2-latin.woff2') format('woff2');
+  }
+  @font-face {
+    font-family: 'Fredoka';
+    font-style: normal;
+    font-weight: 700;
+    src: url('fonts/fredoka-latin.woff2') format('woff2');
+  }
+  :root { color-scheme: dark; }
+  html, body {
+    height: 100%;
+    margin: 0;
+    background: #bfe6f2;
+    overflow: hidden;
+    font-family: 'Baloo 2', system-ui, sans-serif;
+  }
+  #stage { position: fixed; inset: 0; }
+  canvas { display: block; }
+
+  .hud {
+    position: fixed;
+    left: 16px;
+    top: max(16px, env(safe-area-inset-top, 0px));
+    padding: 10px 18px;
+    background: rgba(30, 22, 14, 0.55);
+    color: #fff6e5;
+    border-radius: 14px;
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    pointer-events: none;
+    text-shadow: 0 2px 0 rgba(0,0,0,0.25);
+  }
+
+  .controls {
+    position: fixed;
+    right: 16px;
+    top: max(16px, env(safe-area-inset-top, 0px));
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    padding: 10px 16px;
+    background: rgba(30, 22, 14, 0.55);
+    border-radius: 14px;
+    pointer-events: none;
+    color: #fff6e5;
+    font-weight: 700;
+    font-size: 14px;
+  }
+  .controls .key {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 28px;
+    height: 28px;
+    padding: 0 6px;
+    border-radius: 8px;
+    background: #fff6e5;
+    color: #2b2118;
+    font-weight: 800;
+    font-size: 14px;
+    box-shadow: 0 2px 0 #c9b48a;
+  }
+
+  .hint {
+    position: fixed;
+    left: 50%;
+    top: max(16px, env(safe-area-inset-top, 0px));
+    transform: translateX(-50%);
+    color: #fff6e5;
+    font-weight: 700;
+    font-size: 15px;
+    text-align: center;
+    background: rgba(30,22,14,0.4);
+    padding: 6px 14px;
+    border-radius: 10px;
+    pointer-events: none;
+    transition: opacity 0.6s ease;
+  }
+
+  /* On-screen D-pad -- for trying this in a browser with no keyboard/remote.
+     Laid out exactly like the physical D-pad this maps to (up/left/right/down),
+     so the real Android TV build is a drop-in replacement: same 4 directions,
+     same meaning, just fed from actual KeyEvents instead of these buttons. */
+  .dpad {
+    position: fixed;
+    right: 22px;
+    bottom: max(20px, env(safe-area-inset-bottom, 0px));
+    display: grid;
+    grid-template-columns: 62px 62px 62px;
+    grid-template-rows: 62px 62px 62px;
+    gap: 6px;
+    pointer-events: auto;
+  }
+  .dbtn {
+    border: none;
+    border-radius: 14px;
+    background: rgba(255, 246, 229, 0.92);
+    color: #2b2118;
+    font-size: 26px;
+    font-weight: 800;
+    box-shadow: 0 4px 0 #c9b48a;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: none;
+    user-select: none;
+  }
+  .dbtn:active { transform: translateY(3px); box-shadow: 0 1px 0 #c9b48a; }
+  .dbtn.up { grid-column: 2; grid-row: 1; }
+  .dbtn.left { grid-column: 1; grid-row: 2; }
+  .dbtn.right { grid-column: 3; grid-row: 2; }
+  .dbtn.down { grid-column: 2; grid-row: 3; background: #FFC530; }
+
+  .scoreHud {
+    position: fixed;
+    left: 16px;
+    top: max(66px, calc(env(safe-area-inset-top, 0px) + 66px));
+    padding: 8px 18px;
+    background: rgba(30, 22, 14, 0.55);
+    color: #FFE066;
+    border-radius: 14px;
+    font-size: 20px;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+    pointer-events: none;
+    text-shadow: 0 2px 0 rgba(0,0,0,0.3);
+    transition: transform 0.15s ease;
+  }
+  .scoreHud.pop { transform: scale(1.22); }
+
+  /* Confetti: plain DOM pieces, spawned on a score event and removed once
+     their fall animation finishes. Cheap, no canvas/particle library needed. */
+  #confettiLayer {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    overflow: hidden;
+    z-index: 50;
+  }
+  .confetti {
+    position: absolute;
+    top: -20px;
+    width: 10px;
+    height: 14px;
+    opacity: 0.95;
+    animation-name: confettiFall;
+    animation-timing-function: cubic-bezier(0.3, 0, 0.7, 1);
+    animation-fill-mode: forwards;
+  }
+  @keyframes confettiFall {
+    0% { transform: translate(0, 0) rotate(0deg); opacity: 1; }
+    100% { transform: translate(var(--drift), 100vh) rotate(var(--spin)); opacity: 0.2; }
+  }
+
+  /* ---------- Intro / title screen ---------- */
+  #introScreen {
+    position: fixed;
+    inset: 0;
+    z-index: 200;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(180deg, #FFE9A8 0%, #FFC530 45%, #E9973A 100%);
+    transition: opacity 0.6s ease, visibility 0.6s;
+  }
+  #introScreen.hidden { opacity: 0; visibility: hidden; pointer-events: none; }
+
+  .introSparkle {
+    position: absolute;
+    font-size: 34px;
+    opacity: 0;
+    animation: sparklePop 2.2s ease-in-out infinite;
+  }
+  @keyframes sparklePop {
+    0%, 100% { opacity: 0; transform: scale(0.6) rotate(0deg); }
+    50% { opacity: 0.9; transform: scale(1.15) rotate(15deg); }
+  }
+
+  .introTitle {
+    font-family: 'Fredoka', 'Baloo 2', system-ui, sans-serif;
+    text-align: center;
+    opacity: 0;
+    transform: scale(0.4) translateY(30px);
+    transition: opacity 0.8s cubic-bezier(0.2, 1.4, 0.4, 1), transform 0.8s cubic-bezier(0.2, 1.4, 0.4, 1);
+  }
+  .introTitle.show { opacity: 1; transform: scale(1) translateY(0); }
+  .introTitle .name {
+    display: block;
+    font-size: min(15vw, 96px);
+    font-weight: 700;
+    color: #fff;
+    background: linear-gradient(180deg, #DFF8B0 0%, #7ED957 45%, #2E9E3F 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    text-shadow: 0 6px 0 rgba(15, 74, 25, 0.4);
+    letter-spacing: 0.02em;
+    animation: introWiggle 2.6s ease-in-out infinite 1s;
+  }
+  .introTitle .sub {
+    display: block;
+    margin-top: 6px;
+    font-family: 'Baloo 2', system-ui, sans-serif;
+    font-size: min(6vw, 34px);
+    font-weight: 800;
+    color: #5A2D0C;
+    letter-spacing: 0.08em;
+  }
+  @keyframes introWiggle {
+    0%, 100% { transform: rotate(0deg); }
+    50% { transform: rotate(-1.2deg); }
+  }
+
+  #playButtonWrap {
+    margin-top: 46px;
+    opacity: 0;
+    transform: translateY(16px) scale(0.85);
+    transition: opacity 0.5s ease, transform 0.5s cubic-bezier(0.2, 1.4, 0.4, 1);
+  }
+  #playButtonWrap.show { opacity: 1; transform: translateY(0) scale(1); }
+  #playButton {
+    font-family: 'Baloo 2', system-ui, sans-serif;
+    font-size: 30px;
+    font-weight: 800;
+    color: #5A2D0C;
+    background: #FFFDF5;
+    border: none;
+    border-radius: 22px;
+    padding: 18px 58px;
+    box-shadow: 0 7px 0 #D98A32, 0 12px 22px rgba(0,0,0,0.25);
+    letter-spacing: 0.03em;
+    cursor: pointer;
+    animation: playPulse 1.3s ease-in-out infinite;
+  }
+  #playButton:active { transform: translateY(5px); box-shadow: 0 2px 0 #D98A32; }
+  @keyframes playPulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+  }
+  .introHint {
+    margin-top: 18px;
+    color: #5A2D0C;
+    font-weight: 700;
+    font-size: 15px;
+    opacity: 0.85;
+  }
+</style>
+</head>
+<body>
+
+<div id="stage"></div>
+
+<div id="introScreen">
+  <span class="introSparkle" style="left:12%; top:22%; animation-delay:0s;">✨</span>
+  <span class="introSparkle" style="left:82%; top:18%; animation-delay:0.5s;">⭐</span>
+  <span class="introSparkle" style="left:20%; top:70%; animation-delay:1s;">🌟</span>
+  <span class="introSparkle" style="left:78%; top:68%; animation-delay:1.5s;">✨</span>
+  <div class="introTitle" id="introTitle">
+    <span class="name">Hayagriva</span>
+    <span class="sub">The Engineer</span>
+  </div>
+  <div id="playButtonWrap">
+    <button id="playButton">▶ PLAY</button>
+  </div>
+  <div class="introHint">Press ▶ or any button to start</div>
+</div>
+<div class="hud">🚜 Hayagriva - The Engineer</div>
+<div class="controls">
+  <span class="key">◀</span><span class="key">▶</span> Turn
+  <span class="key" style="margin-left:8px">▲</span> Drive
+  <span class="key" style="margin-left:8px">▼</span> Dig
+</div>
+<div class="hint" id="hint">▲ drive · ◀ ▶ turn · ▼ dig</div>
+<div class="hud" id="loadsHud" style="left:auto;right:16px;top:max(58px, calc(env(safe-area-inset-top, 0px) + 58px));display:none;">🚛 Loads: <span id="loadsCount">0</span></div>
+<div class="scoreHud" id="scoreHud">⭐ Score: <span id="scoreValue">0</span></div>
+<div id="confettiLayer"></div>
+
+<div class="dpad">
+  <button class="dbtn up" id="btnUp" aria-label="Drive forward">▲</button>
+  <button class="dbtn left" id="btnLeft" aria-label="Turn left">◀</button>
+  <button class="dbtn right" id="btnRight" aria-label="Turn right">▶</button>
+  <button class="dbtn down" id="btnDig" aria-label="Dig">▼</button>
+</div>
+
+<script src="js/three.min.js"></script>
+<script>
+(function () {
+  "use strict";
+
+  // ---------- Renderer / scene / camera ----------
+  var stage = document.getElementById('stage');
+  var scene = new THREE.Scene();
+  scene.background = new THREE.Color(0xbfe6f2);
+  scene.fog = new THREE.Fog(0xbfe6f2, 60, 170);
+
+  var camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 400);
+
+  var renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  stage.appendChild(renderer.domElement);
+
+  window.addEventListener('resize', function () {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+
+  // ---------- Sound: synthesized with Web Audio, no audio files -----------
+  // Everything here is generated tones/noise, so there's no licensing question
+  // and nothing to ship as an asset. Starts lazily on the first real input
+  // (browsers require a user gesture before audio is allowed to play).
+  var audioCtx = null;
+  var engineNode = null;
+  var ambientStarted = false;
+  function ensureAudio() {
+    if (!audioCtx) {
+      try {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      } catch (e) { audioCtx = null; }
+    }
+    if (audioCtx && !ambientStarted) {
+      ambientStarted = true;
+      startWindAmbience();
+      startAmbientMusic();
+    }
+  }
+
+  // A short, bright, triumphant stinger the very first moment the game
+  // becomes interactive -- an exciting "let's go!" instead of the game just
+  // silently starting.
+  function playStartFanfare() {
+    var t0 = audioCtx.currentTime;
+    var notes = [392.0, 523.25, 659.25, 783.99]; // G4 C5 E5 G5 -- rising, bright, no tension
+    notes.forEach(function (freq, idx) {
+      var start = t0 + idx * 0.11;
+      var osc = audioCtx.createOscillator();
+      var gain = audioCtx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0, start);
+      gain.gain.linearRampToValueAtTime(0.22, start + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, start + (idx === notes.length - 1 ? 0.55 : 0.22));
+      osc.connect(gain).connect(audioCtx.destination);
+      osc.start(start);
+      osc.stop(start + 0.6);
+    });
+  }
+
+  // Soft, continuous outdoor air -- filtered noise looped forever at very low
+  // volume, present the whole time regardless of what the JCB is doing.
+  function startWindAmbience() {
+    var bufSize = audioCtx.sampleRate * 4;
+    var buf = audioCtx.createBuffer(1, bufSize, audioCtx.sampleRate);
+    var data = buf.getChannelData(0);
+    var last0 = 0;
+    for (var i = 0; i < bufSize; i++) {
+      var white = Math.random() * 2 - 1;
+      last0 = (last0 + 0.02 * white) / 1.02; // gentle brown-noise integration: soft, not hissy
+      data[i] = last0 * 3.5;
+    }
+    var wind = audioCtx.createBufferSource();
+    wind.buffer = buf;
+    wind.loop = true;
+    var filter = audioCtx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.value = 700;
+    filter.Q.value = 0.6;
+    var gain = audioCtx.createGain();
+    gain.gain.value = 0.05;
+    wind.connect(filter).connect(gain).connect(audioCtx.destination);
+    wind.start();
+  }
+
+  // A slow, soothing pentatonic melody -- same idea as calm children's focus
+  // music: no leading tone, no tense intervals, soft attack/release on every
+  // note, playing quietly under everything for as long as the page is open.
+  var AMBIENT_SCALE = [220.0, 246.94, 277.18, 329.63, 369.99]; // A pentatonic, low register
+  function scheduleNextAmbientNote() {
+    var freq = AMBIENT_SCALE[Math.floor(Math.random() * AMBIENT_SCALE.length)];
+    var t0 = audioCtx.currentTime;
+    var dur = 2.4 + Math.random() * 1.4;
+    var osc = audioCtx.createOscillator();
+    var gain = audioCtx.createGain();
+    osc.type = 'sine';
+    osc.frequency.value = freq;
+    gain.gain.setValueAtTime(0, t0);
+    gain.gain.linearRampToValueAtTime(0.05, t0 + dur * 0.35);
+    gain.gain.linearRampToValueAtTime(0, t0 + dur);
+    osc.connect(gain).connect(audioCtx.destination);
+    osc.start(t0);
+    osc.stop(t0 + dur + 0.1);
+    setTimeout(scheduleNextAmbientNote, (dur + 1.2 + Math.random() * 1.8) * 1000);
+  }
+  function startAmbientMusic() {
+    setTimeout(scheduleNextAmbientNote, 800);
+  }
+
+  function playThud() {
+    if (!audioCtx) return;
+    var t0 = audioCtx.currentTime;
+    var jitter = 0.9 + Math.random() * 0.2; // small per-dig variation so it never sounds like a loop
+
+    // Sub-bass thump: the weight of the bucket hitting packed ground.
+    var osc = audioCtx.createOscillator();
+    var gain = audioCtx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(120 * jitter, t0);
+    osc.frequency.exponentialRampToValueAtTime(38 * jitter, t0 + 0.22);
+    gain.gain.setValueAtTime(0.55, t0);
+    gain.gain.exponentialRampToValueAtTime(0.001, t0 + 0.28);
+    osc.connect(gain).connect(audioCtx.destination);
+    osc.start(t0);
+    osc.stop(t0 + 0.3);
+
+    // Gritty crunch: bucket teeth tearing through sand.
+    var bufSize = audioCtx.sampleRate * 0.2;
+    var buf = audioCtx.createBuffer(1, bufSize, audioCtx.sampleRate);
+    var data = buf.getChannelData(0);
+    for (var i = 0; i < bufSize; i++) data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / bufSize, 1.4);
+    var noise = audioCtx.createBufferSource();
+    noise.buffer = buf;
+    var filter = audioCtx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = 1100 * jitter;
+    var ngain = audioCtx.createGain();
+    ngain.gain.setValueAtTime(0.4, t0);
+    ngain.gain.exponentialRampToValueAtTime(0.001, t0 + 0.18);
+    noise.connect(filter).connect(ngain).connect(audioCtx.destination);
+    noise.start(t0);
+
+    // Metal clack: the teeth themselves striking harder ground underneath.
+    var clackOsc = audioCtx.createOscillator();
+    var clackGain = audioCtx.createGain();
+    clackOsc.type = 'square';
+    clackOsc.frequency.setValueAtTime(320 * jitter, t0 + 0.01);
+    clackOsc.frequency.exponentialRampToValueAtTime(180 * jitter, t0 + 0.08);
+    clackGain.gain.setValueAtTime(0.08, t0 + 0.01);
+    clackGain.gain.exponentialRampToValueAtTime(0.001, t0 + 0.1);
+    clackOsc.connect(clackGain).connect(audioCtx.destination);
+    clackOsc.start(t0 + 0.01);
+    clackOsc.stop(t0 + 0.12);
+  }
+
+  function playClink() {
+    if (!audioCtx) return;
+    var t0 = audioCtx.currentTime;
+    [880, 1320].forEach(function (freq, idx) {
+      var osc = audioCtx.createOscillator();
+      var gain = audioCtx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(freq, t0);
+      gain.gain.setValueAtTime(0.18, t0 + idx * 0.03);
+      gain.gain.exponentialRampToValueAtTime(0.001, t0 + 0.25 + idx * 0.03);
+      osc.connect(gain).connect(audioCtx.destination);
+      osc.start(t0 + idx * 0.03);
+      osc.stop(t0 + 0.3 + idx * 0.03);
+    });
+  }
+
+  // A quick bright "ding" for every point earned, so scoring feels rewarding
+  // throughout the game, not just at the one big truck-load celebration.
+  function playDing() {
+    if (!audioCtx) return;
+    var t0 = audioCtx.currentTime;
+    var osc = audioCtx.createOscillator();
+    var gain = audioCtx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(1046.5, t0); // C6
+    osc.frequency.exponentialRampToValueAtTime(1568, t0 + 0.09); // G6
+    gain.gain.setValueAtTime(0.16, t0);
+    gain.gain.exponentialRampToValueAtTime(0.001, t0 + 0.22);
+    osc.connect(gain).connect(audioCtx.destination);
+    osc.start(t0);
+    osc.stop(t0 + 0.24);
+  }
+
+  // A round of applause -- several short filtered noise bursts in quick
+  // uneven succession, standing in for a handful of hand claps.
+  function playClap() {
+    if (!audioCtx) return;
+    var t0 = audioCtx.currentTime;
+    var clapTimes = [0, 0.09, 0.16, 0.26, 0.34];
+    clapTimes.forEach(function (offset) {
+      var bufSize = audioCtx.sampleRate * 0.08;
+      var buf = audioCtx.createBuffer(1, bufSize, audioCtx.sampleRate);
+      var data = buf.getChannelData(0);
+      for (var i = 0; i < bufSize; i++) data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / bufSize, 2);
+      var src = audioCtx.createBufferSource();
+      src.buffer = buf;
+      var filter = audioCtx.createBiquadFilter();
+      filter.type = 'bandpass';
+      filter.frequency.value = 1800 + Math.random() * 600;
+      filter.Q.value = 0.9;
+      var gain = audioCtx.createGain();
+      gain.gain.value = 0.3;
+      src.connect(filter).connect(gain).connect(audioCtx.destination);
+      src.start(t0 + offset);
+    });
+  }
+
+  function setEngineRunning(running) {
+    if (!audioCtx) return;
+    if (running && !engineNode) {
+      var osc = audioCtx.createOscillator();
+      var gain = audioCtx.createGain();
+      osc.type = 'sawtooth';
+      osc.frequency.value = 72;
+      gain.gain.value = 0.065;
+      var filter = audioCtx.createBiquadFilter();
+      filter.type = 'lowpass';
+      filter.frequency.value = 260;
+      osc.connect(filter).connect(gain).connect(audioCtx.destination);
+      osc.start();
+
+      // A brighter harmonic layer an octave up, for a more energetic
+      // "working engine" feel instead of just a dull low hum.
+      var osc2 = audioCtx.createOscillator();
+      var gain2 = audioCtx.createGain();
+      osc2.type = 'sawtooth';
+      osc2.frequency.value = 144;
+      gain2.gain.value = 0.02;
+      var filter2 = audioCtx.createBiquadFilter();
+      filter2.type = 'bandpass';
+      filter2.frequency.value = 500;
+      osc2.connect(filter2).connect(gain2).connect(audioCtx.destination);
+      osc2.start();
+
+      // Slow tremolo so the idle "chugs" instead of droning flat.
+      var lfo = audioCtx.createOscillator();
+      var lfoGain = audioCtx.createGain();
+      lfo.type = 'sine';
+      lfo.frequency.value = 9;
+      lfoGain.gain.value = 0.018;
+      lfo.connect(lfoGain).connect(gain.gain);
+      lfo.start();
+
+      engineNode = { osc: osc, gain: gain, osc2: osc2, gain2: gain2, lfo: lfo };
+    } else if (!running && engineNode) {
+      var g = engineNode.gain, o = engineNode.osc;
+      var g2 = engineNode.gain2, o2 = engineNode.osc2, lfoNode = engineNode.lfo;
+      var t0 = audioCtx.currentTime;
+      g.gain.setTargetAtTime(0, t0, 0.08);
+      g2.gain.setTargetAtTime(0, t0, 0.08);
+      setTimeout(function () {
+        try { o.stop(); } catch (e) {}
+        try { o2.stop(); } catch (e) {}
+        try { lfoNode.stop(); } catch (e) {}
+      }, 200);
+      engineNode = null;
+    }
+  }
+
+  // Continuous hydraulic whine for the whole dig sequence (reach through
+  // return), so digging is audible the entire time it's happening -- not
+  // just a single thud at the moment of impact.
+  var servoNode = null;
+  function setServoRunning(running) {
+    if (!audioCtx) return;
+    if (running && !servoNode) {
+      var osc = audioCtx.createOscillator();
+      var gain = audioCtx.createGain();
+      osc.type = 'sawtooth';
+      osc.frequency.value = 240;
+      gain.gain.value = 0;
+      gain.gain.setTargetAtTime(0.05, audioCtx.currentTime, 0.06);
+      var filter = audioCtx.createBiquadFilter();
+      filter.type = 'bandpass';
+      filter.frequency.value = 480;
+      filter.Q.value = 1.1;
+      osc.connect(filter).connect(gain).connect(audioCtx.destination);
+      osc.start();
+      servoNode = { osc: osc, gain: gain };
+    } else if (!running && servoNode) {
+      var g = servoNode.gain, o = servoNode.osc;
+      g.gain.setTargetAtTime(0, audioCtx.currentTime, 0.1);
+      setTimeout(function () { try { o.stop(); } catch (e) {} }, 220);
+      servoNode = null;
+    }
+  }
+
+  // ---------- Lights ----------
+  var ambient = new THREE.HemisphereLight(0xffffff, 0xd9b476, 0.85);
+  scene.add(ambient);
+  var sun = new THREE.DirectionalLight(0xfff2d6, 1.0);
+  sun.position.set(45, 60, 30);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(1536, 1536);
+  var SHADOW_SPAN = 70;
+  sun.shadow.camera.left = -SHADOW_SPAN;
+  sun.shadow.camera.right = SHADOW_SPAN;
+  sun.shadow.camera.top = SHADOW_SPAN;
+  sun.shadow.camera.bottom = -SHADOW_SPAN;
+  sun.shadow.camera.near = 10;
+  sun.shadow.camera.far = 180;
+  sun.shadow.bias = -0.0015;
+  scene.add(sun);
+  scene.add(sun.target);
+
+  // ---------- Sand ground (deformable, large open field) ----------
+  var GROUND_SIZE = 110;
+  var GROUND_SEGS = 72;
+  var groundGeo = new THREE.PlaneGeometry(GROUND_SIZE, GROUND_SIZE, GROUND_SEGS, GROUND_SEGS);
+  groundGeo.rotateX(-Math.PI / 2);
+
+  var posAttr = groundGeo.attributes.position;
+  var vertexCount = posAttr.count;
+  var baseHeights = new Float32Array(vertexCount);
+  for (var i = 0; i < vertexCount; i++) baseHeights[i] = posAttr.getY(i);
+
+  groundGeo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(vertexCount * 3), 3));
+  var colorAttr = groundGeo.attributes.color;
+  var SAND_TOP = new THREE.Color(0xE9C989);
+  var SAND_DUG = new THREE.Color(0xB98A4E);
+  for (var c = 0; c < vertexCount; c++) {
+    colorAttr.setXYZ(c, SAND_TOP.r, SAND_TOP.g, SAND_TOP.b);
+  }
+
+  var groundMat = new THREE.MeshLambertMaterial({ vertexColors: THREE.VertexColors });
+  var ground = new THREE.Mesh(groundGeo, groundMat);
+  ground.receiveShadow = true;
+  scene.add(ground);
+
+  var dirtBed = new THREE.Mesh(
+    new THREE.BoxGeometry(GROUND_SIZE, 4, GROUND_SIZE),
+    new THREE.MeshLambertMaterial({ color: 0x7a5230 })
+  );
+  dirtBed.position.y = -2.3;
+  scene.add(dirtBed);
+
+  function digAt(worldX, worldZ, radius, depth) {
+    var dugAny = false;
+    for (var i = 0; i < vertexCount; i++) {
+      var vx = posAttr.getX(i);
+      var vz = posAttr.getZ(i);
+      var dx = vx - worldX;
+      var dz = vz - worldZ;
+      var d = Math.sqrt(dx * dx + dz * dz);
+      if (d < radius) {
+        var t = 1 - d / radius;
+        var falloff = t * t * (3 - 2 * t);
+        var targetY = baseHeights[i] - depth * falloff;
+        var currentY = posAttr.getY(i);
+        if (targetY < currentY) {
+          posAttr.setY(i, targetY);
+          dugAny = true;
+          var mix = Math.min(1, (baseHeights[i] - posAttr.getY(i)) / (depth * 0.8));
+          var col = SAND_TOP.clone().lerp(SAND_DUG, Math.min(1, mix + 0.15));
+          colorAttr.setXYZ(i, col.r, col.g, col.b);
+        }
+      }
+    }
+    if (dugAny) {
+      posAttr.needsUpdate = true;
+      colorAttr.needsUpdate = true;
+      groundGeo.computeVertexNormals();
+    }
+    return dugAny;
+  }
+
+  // ---------- Scenery ----------
+  // Kept deliberately sparse and purely decorative -- nothing here blocks
+  // driving. With full 360-degree movement, going around something is easy
+  // and fun; a hard wall the child can't pass is just frustrating, so there
+  // are no solid obstacles at all.
+  function addRock(x, z, s) {
+    var rock = new THREE.Mesh(
+      new THREE.DodecahedronGeometry(s, 0),
+      new THREE.MeshLambertMaterial({ color: 0x8b8378 })
+    );
+    rock.position.set(x, s * 0.5, z);
+    rock.rotation.set(Math.random(), Math.random(), Math.random());
+    rock.castShadow = true;
+    rock.receiveShadow = true;
+    scene.add(rock);
+  }
+  function addBush(x, z, s) {
+    var bush = new THREE.Mesh(
+      new THREE.IcosahedronGeometry(s, 0),
+      new THREE.MeshLambertMaterial({ color: 0x6fae4e })
+    );
+    bush.position.set(x, s * 0.8, z);
+    bush.castShadow = true;
+    scene.add(bush);
+  }
+  addRock(-24, -16, 1.7);
+  addRock(18, 22, 1.4);
+  addRock(-30, 20, 1.2);
+  addBush(-14, -22, 1.4);
+  addBush(26, 8, 1.2);
+  addBush(-8, 26, 1.3);
+  addBush(12, -26, 1.1);
+
+  // Distant low-poly hills ringing the field, for horizon depth ("still large,
+  // real 3D" scale) -- purely a backdrop, well outside the drivable area.
+  function addHill(x, z, s, h) {
+    var hill = new THREE.Mesh(
+      new THREE.ConeGeometry(s, h, 7),
+      new THREE.MeshLambertMaterial({ color: 0x7fa66b })
+    );
+    hill.position.set(x, h * 0.5 - 1, z);
+    scene.add(hill);
+  }
+  var HILL_RING_R = GROUND_SIZE * 0.62;
+  for (var hi = 0; hi < 14; hi++) {
+    var ang = (hi / 14) * Math.PI * 2 + 0.3;
+    var r = HILL_RING_R + Math.random() * 18;
+    addHill(Math.cos(ang) * r, Math.sin(ang) * r, 14 + Math.random() * 10, 18 + Math.random() * 16);
+  }
+
+  // ---------- JCB build ----------
+  // Still all primitives (no external model file, nothing to license) but
+  // with a lot more mechanical detail than a first pass: painted panels get
+  // a glossy finish, the arm has real hydraulic rams that visibly extend and
+  // retract as it moves, and the bucket has teeth -- these are the details
+  // that make the digging motion actually read as digging.
+  var YELLOW = 0xFFC530;
+  var DARK = 0x2B2118;
+  var STEEL = 0x4A4A4A;
+  var CHROME = 0xD8D8D8;
+  var GLASS = 0x9FE3F0;
+
+  function paintMat(color) { return new THREE.MeshPhongMaterial({ color: color, shininess: 55, specular: 0x554422 }); }
+  function metalMat(color) { return new THREE.MeshPhongMaterial({ color: color, shininess: 90, specular: 0x888888 }); }
+  function matteMat(color) { return new THREE.MeshLambertMaterial({ color: color }); }
+
+  var jcb = new THREE.Group();
+
+  var body = new THREE.Mesh(new THREE.BoxGeometry(3.6, 1.3, 2.0), paintMat(YELLOW));
+  body.position.y = 1.1;
+  body.castShadow = true;
+  jcb.add(body);
+
+  // Raised engine hood, forward of the cab -- breaks up the body silhouette
+  // and reads as a real mechanical panel rather than one flat block.
+  var hood = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.35, 1.7), paintMat(0xE0A82A));
+  hood.position.set(1.1, 1.85, 0);
+  hood.castShadow = true;
+  jcb.add(hood);
+
+  var chassis = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.5, 2.1), matteMat(DARK));
+  chassis.position.y = 0.55;
+  chassis.castShadow = true;
+  jcb.add(chassis);
+
+  var cab = new THREE.Mesh(new THREE.BoxGeometry(1.6, 1.3, 1.8), paintMat(YELLOW));
+  cab.position.set(-0.3, 2.15, 0);
+  cab.castShadow = true;
+  jcb.add(cab);
+
+  var windshield = new THREE.Mesh(
+    new THREE.BoxGeometry(1.66, 0.9, 1.5),
+    new THREE.MeshPhongMaterial({ color: GLASS, transparent: true, opacity: 0.7, shininess: 120, specular: 0xffffff })
+  );
+  windshield.position.set(-0.3, 2.15, 0);
+  jcb.add(windshield);
+
+  // Roof light bar -- a row of small white work lights along the cab's
+  // front-top edge, matching a real backhoe loader's light cluster.
+  for (var liIdx = 0; liIdx < 4; liIdx++) {
+    var roofLight = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.09, 0.14), new THREE.MeshBasicMaterial({ color: 0xFFFCF0 }));
+    roofLight.position.set(0.52, 2.82, -0.55 + liIdx * 0.37);
+    jcb.add(roofLight);
+  }
+
+  // Driver -- simple, chunky, toy-figure style (deliberately not realistic;
+  // matches the rest of the vehicle's low-poly language), seated in the cab
+  // and visible through the glass.
+  var driver = new THREE.Group();
+  var torso = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.48, 0.36), matteMat(0x2E6FBB));
+  torso.position.set(0, 0, 0);
+  driver.add(torso);
+  var head = new THREE.Mesh(new THREE.SphereGeometry(0.19, 12, 10), matteMat(0xF2C09A));
+  head.position.set(0, 0.4, 0);
+  driver.add(head);
+  var cap = new THREE.Mesh(new THREE.SphereGeometry(0.2, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2.1), matteMat(0xC0392B));
+  cap.position.set(0, 0.46, 0);
+  driver.add(cap);
+  [1, -1].forEach(function (side) {
+    var arm = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.35, 0.14), matteMat(0x2E6FBB));
+    arm.position.set(0.16, -0.05, side * 0.26);
+    arm.rotation.z = side * 0.25;
+    driver.add(arm);
+  });
+  driver.position.set(-0.55, 1.95, 0);
+  jcb.add(driver);
+
+  // Mirrors on thin stalks, either side of the cab.
+  [1.05, -1.05].forEach(function (zSide) {
+    var stalk = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.3, 6), metalMat(CHROME));
+    stalk.position.set(0.35, 2.35, zSide);
+    stalk.rotation.z = Math.PI / 2 * 0.15;
+    jcb.add(stalk);
+    var mirror = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.22, 0.16), matteMat(DARK));
+    mirror.position.set(0.5, 2.35, zSide * 1.12);
+    jcb.add(mirror);
+  });
+
+  // Headlights, front of the body.
+  [0.7, -0.7].forEach(function (zSide) {
+    var light = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.08, 12), new THREE.MeshBasicMaterial({ color: 0xFFF6C4 }));
+    light.rotation.z = Math.PI / 2;
+    light.position.set(1.82, 1.25, zSide);
+    jcb.add(light);
+  });
+
+  // Exhaust pipe, behind the hood.
+  var exhaust = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.07, 0.55, 8), metalMat(0x707070));
+  exhaust.position.set(0.55, 2.15, 0.75);
+  exhaust.castShadow = true;
+  jcb.add(exhaust);
+  var exhaustTip = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.06, 0.08, 8), metalMat(CHROME));
+  exhaustTip.position.set(0.55, 2.44, 0.75);
+  jcb.add(exhaustTip);
+
+  var wheelGeo = new THREE.CylinderGeometry(0.62, 0.62, 0.5, 16);
+  var wheelMat = matteMat(DARK);
+  var hubGeo = new THREE.CylinderGeometry(0.3, 0.3, 0.53, 8);
+  var hubMat = paintMat(YELLOW); // painted rims, matching the reference photo
+  var wheels = [];
+  // z = +-1.82: clears the chassis's own half-width (1.05) plus the wheel's
+  // radius (0.62) with a visible gap, so the wheel sits beside the body
+  // instead of sinking into it.
+  [[-1.55, 0.62, 1.82], [-1.55, 0.62, -1.82], [1.55, 0.62, 1.82], [1.55, 0.62, -1.82]].forEach(function (p) {
+    var w = new THREE.Mesh(wheelGeo, wheelMat);
+    w.rotation.z = Math.PI / 2;
+    w.position.set(p[0], p[1], p[2]);
+    w.castShadow = true;
+    jcb.add(w);
+    var hub = new THREE.Mesh(hubGeo, hubMat);
+    hub.rotation.z = Math.PI / 2;
+    hub.position.copy(w.position);
+    jcb.add(hub);
+    wheels.push(w);
+    wheels.push(hub); // hub spins with the wheel too
+  });
+
+  var boomPivot = new THREE.Group();
+  boomPivot.position.set(1.7, 1.5, 0);
+  jcb.add(boomPivot);
+
+  var boom = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.45, 0.45), paintMat(YELLOW));
+  boom.position.set(1.3, 0.35, 0);
+  boom.castShadow = true;
+  boomPivot.add(boom);
+
+  var dipperPivot = new THREE.Group();
+  dipperPivot.position.set(2.6, 0.7, 0);
+  boomPivot.add(dipperPivot);
+
+  var dipper = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.38, 0.38), paintMat(YELLOW));
+  dipper.position.set(0.85, -0.45, 0);
+  dipper.castShadow = true;
+  dipperPivot.add(dipper);
+
+  var bucketPivot = new THREE.Group();
+  bucketPivot.position.set(1.7, -0.9, 0);
+  dipperPivot.add(bucketPivot);
+
+  var bucket = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.6, 1.1), metalMat(STEEL));
+  bucket.position.set(0.35, -0.2, 0);
+  bucket.castShadow = true;
+  bucketPivot.add(bucket);
+
+  // Bucket teeth -- worn-steel colored so they read clearly against the
+  // darker bucket body, sized to actually be seen, not just technically
+  // present. Attached to the bucket, so they move with it for free.
+  var toothMat = metalMat(0x161616);
+  for (var tIdx = 0; tIdx < 5; tIdx++) {
+    var tooth = new THREE.Mesh(new THREE.ConeGeometry(0.13, 0.46, 5), toothMat);
+    tooth.position.set(0.84, -0.55, -0.46 + tIdx * 0.23);
+    tooth.rotation.x = Math.PI / 2 + 0.35;
+    tooth.castShadow = true;
+    bucketPivot.add(tooth);
+  }
+
+  // ---------- Front loader arm + bucket (animated) ----------
+  // A real backhoe loader has a working end at both ends of the vehicle. The
+  // rear arm digs (the approved game mechanic, triggered by the dig button).
+  // This front loader now moves too, on the same button, so both ends of the
+  // machine come alive together instead of one end sitting frozen: a lift
+  // pivot raises the whole arm assembly, and a tilt pivot curls the bucket.
+  function addStaticBeam(parent, a, b, thickness, color) {
+    var dir = b.clone().sub(a);
+    var len = dir.length();
+    var mesh = new THREE.Mesh(new THREE.BoxGeometry(len, thickness, thickness), matteMat(color));
+    mesh.position.copy(a).add(dir.clone().multiplyScalar(0.5));
+    mesh.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), dir.clone().normalize());
+    mesh.castShadow = true;
+    parent.add(mesh);
+    return mesh;
+  }
+
+  var loaderLift = new THREE.Group();
+  loaderLift.position.set(-1.55, 1.65, 0);
+  jcb.add(loaderLift);
+
+  [0.85, -0.85].forEach(function (z) {
+    var armA = new THREE.Vector3(0, 0, z);
+    var armB = new THREE.Vector3(-1.5, -1.0, z);
+    addStaticBeam(loaderLift, armA, armB, 0.22, DARK);
+    var ramA = new THREE.Vector3(-0.15, -0.5, z);
+    var ramB = new THREE.Vector3(-1.0, -0.7, z);
+    addStaticBeam(loaderLift, ramA, ramB, 0.09, CHROME);
+  });
+
+  var loaderTilt = new THREE.Group();
+  loaderTilt.position.set(-1.5, -1.0, 0);
+  loaderLift.add(loaderTilt);
+
+  var frontBucket = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.55, 1.9), metalMat(0x2e2e2e));
+  frontBucket.position.set(-0.3, -0.2, 0);
+  frontBucket.rotation.z = -0.25;
+  frontBucket.castShadow = true;
+  loaderTilt.add(frontBucket);
+  for (var fIdx = 0; fIdx < 6; fIdx++) {
+    var fTooth = new THREE.Mesh(new THREE.ConeGeometry(0.11, 0.34, 5), toothMat);
+    fTooth.position.set(-0.32, -0.34, -0.8 + fIdx * 0.32);
+    fTooth.rotation.x = Math.PI / 2;
+    fTooth.castShadow = true;
+    frontBucket.add(fTooth);
+  }
+
+  var LOADER_IDLE = { lift: 0, tilt: 0 };
+  var LOADER_ACTIVE = { lift: 0.42, tilt: 0.65 };
+  var loaderBlend = 0;
+  function updateLoaderArm(dt) {
+    var want = digPhase !== 'idle' ? 1 : 0;
+    loaderBlend += (want - loaderBlend) * Math.min(1, dt * 3);
+    loaderLift.rotation.z = lerp(LOADER_IDLE.lift, LOADER_ACTIVE.lift, loaderBlend);
+    loaderTilt.rotation.z = lerp(LOADER_IDLE.tilt, LOADER_ACTIVE.tilt, loaderBlend);
+  }
+
+  // Rear stabilizer legs, by the working (digging) end -- a real backhoe
+  // drops these to brace itself before digging. Static here, purely for silhouette.
+  [1.35, -1.35].forEach(function (z) {
+    var leg = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.75, 0.2), matteMat(DARK));
+    leg.position.set(1.95, 0.38, z);
+    leg.castShadow = true;
+    jcb.add(leg);
+    var foot = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.08, 0.4), matteMat(0x1a1a1a));
+    foot.position.set(1.95, 0.02, z);
+    jcb.add(foot);
+  });
+
+  scene.add(jcb);
+
+  // ---------- Hydraulic rams: real struts linking body -> boom -> dipper ->
+  // bucket, stretching and re-angling every frame to match the arm's actual
+  // pose. This is the single biggest legibility upgrade for "watch it dig":
+  // a real excavator's arm reads as mechanical because you can see the rams
+  // push and pull it, not just three yellow bars swinging.
+  var RAM_BASE_LEN = 1;
+  function makeRam() {
+    var g = new THREE.Group();
+    var outer = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, RAM_BASE_LEN, 8), matteMat(0x3a3a3a));
+    var inner = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, RAM_BASE_LEN, 8), metalMat(CHROME));
+    outer.castShadow = true;
+    g.add(outer);
+    g.add(inner);
+    g.userData = { outer: outer, inner: inner };
+    scene.add(g);
+    return g;
+  }
+  var ramBase = makeRam();   // body -> boom
+  var ramMid = makeRam();    // boom -> dipper
+  var ramBucket = makeRam(); // dipper -> bucket
+
+  var _v1 = new THREE.Vector3(), _v2 = new THREE.Vector3(), _up = new THREE.Vector3(0, 1, 0);
+  function pointWorld(obj, lx, ly, lz, out) {
+    out.set(lx, ly, lz);
+    return obj.localToWorld(out);
+  }
+  function updateRam(ram, aWorld, bWorld) {
+    var dir = _v2.copy(bWorld).sub(aWorld);
+    var len = dir.length();
+    ram.position.copy(aWorld).add(dir.clone().multiplyScalar(0.5));
+    ram.scale.set(1, len / RAM_BASE_LEN, 1);
+    ram.quaternion.setFromUnitVectors(_up, dir.normalize());
+  }
+  function updateRams() {
+    jcb.updateMatrixWorld(true);
+    updateRam(ramBase, pointWorld(jcb, 0.9, 1.75, 0.62, _v1).clone(), pointWorld(boomPivot, 1.7, -0.05, 0.4, new THREE.Vector3()));
+    updateRam(ramMid, pointWorld(boomPivot, 2.05, 0.85, 0.4, _v1).clone(), pointWorld(dipperPivot, 0.55, -0.55, 0.4, new THREE.Vector3()));
+    updateRam(ramBucket, pointWorld(dipperPivot, 1.25, -0.15, 0.4, _v1).clone(), pointWorld(bucketPivot, 0.1, 0.35, 0.4, new THREE.Vector3()));
+  }
+
+  // ---------- Dump truck: parked target for loading dug sand ----------
+  var TRUCK_POS = { x: 30, z: -18 };
+  var TRUCK_MAX_LOADS = 6;
+  var truckLoads = 0;
+  var loadsHud = document.getElementById('loadsHud');
+  var loadsCountEl = document.getElementById('loadsCount');
+
+  // ---------- Score + celebration (clap + confetti on a truck load) ----------
+  var score = 0;
+  var scoreHud = document.getElementById('scoreHud');
+  var scoreValueEl = document.getElementById('scoreValue');
+  function addScore(points) {
+    score += points;
+    scoreValueEl.textContent = String(score);
+    scoreHud.classList.add('pop');
+    playDing();
+    setTimeout(function () { scoreHud.classList.remove('pop'); }, 160);
+  }
+
+  var confettiLayer = document.getElementById('confettiLayer');
+  var CONFETTI_COLORS = ['#FFC530', '#E05A2B', '#4FA8D8', '#6FCB6F', '#FF6B9D', '#FFFFFF'];
+  function spawnConfetti() {
+    for (var i = 0; i < 40; i++) {
+      var piece = document.createElement('div');
+      piece.className = 'confetti';
+      piece.style.left = (45 + Math.random() * 10) + 'vw';
+      piece.style.background = CONFETTI_COLORS[Math.floor(Math.random() * CONFETTI_COLORS.length)];
+      piece.style.setProperty('--drift', (Math.random() * 240 - 120) + 'px');
+      piece.style.setProperty('--spin', (Math.random() * 720 - 360) + 'deg');
+      var duration = 1.4 + Math.random() * 1.0;
+      piece.style.animationDuration = duration + 's';
+      piece.style.animationDelay = (Math.random() * 0.25) + 's';
+      confettiLayer.appendChild(piece);
+      (function (el, ms) { setTimeout(function () { el.remove(); }, ms); })(piece, (duration + 0.3) * 1000);
+    }
+  }
+  function celebrate(points) {
+    addScore(points);
+    playClap();
+    spawnConfetti();
+  }
+
+  var truck = new THREE.Group();
+  truck.position.set(TRUCK_POS.x, 0, TRUCK_POS.z);
+  truck.rotation.y = 0.5; // parked at a friendly angle, not axis-aligned
+  scene.add(truck);
+
+  var ORANGE = 0xE05A2B;
+  function truckPart(geo, color, x, y, z) {
+    var m = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color: color }));
+    m.position.set(x, y, z);
+    m.castShadow = true;
+    m.receiveShadow = true;
+    truck.add(m);
+    return m;
+  }
+  truckPart(new THREE.BoxGeometry(6.5, 0.5, 2.2), STEEL, 0, 0.55, 0);
+  truckPart(new THREE.BoxGeometry(1.6, 1.4, 2.0), ORANGE, -2.6, 1.4, 0);
+  var truckBedFloor = truckPart(new THREE.BoxGeometry(4.2, 0.3, 2.0), 0x555555, 0.6, 1.05, 0);
+  [[-1.4, 0], [2.6, 0]].forEach(function (p) { truckPart(new THREE.BoxGeometry(0.2, 1.0, 2.0), ORANGE, p[0], 1.55, 0); });
+  [1.0, -1.0].forEach(function (z) { truckPart(new THREE.BoxGeometry(4.2, 1.0, 0.2), ORANGE, 0.6, 1.55, z); });
+  [[-2.2, 1.82], [-2.2, -1.82], [1.8, 1.82], [1.8, -1.82]].forEach(function (p) {
+    var w = new THREE.Mesh(wheelGeo, wheelMat);
+    w.rotation.z = Math.PI / 2;
+    w.position.set(p[0], 0.62, p[1]);
+    w.castShadow = true;
+    truck.add(w);
+  });
+
+  var truckFill = new THREE.Mesh(
+    new THREE.BoxGeometry(3.8, 0.1, 1.7),
+    new THREE.MeshLambertMaterial({ color: SAND_DUG })
+  );
+  truckFill.position.set(0.6, 1.25, 0);
+  truckFill.visible = false;
+  truck.add(truckFill);
+
+  var truckBedWorldCenter = new THREE.Vector3();
+  truckBedFloor.getWorldPosition(truckBedWorldCenter); // static (truck never moves), computed once
+
+  function tryLoadTruck(worldX, worldZ) {
+    var dx = worldX - truckBedWorldCenter.x, dz = worldZ - truckBedWorldCenter.z;
+    if (Math.sqrt(dx * dx + dz * dz) > 3.4) return false;
+    if (truckLoads >= TRUCK_MAX_LOADS) return true;
+    truckLoads++;
+    loadsHud.style.display = 'block';
+    loadsCountEl.textContent = String(truckLoads);
+    truckFill.visible = true;
+    var fillT = truckLoads / TRUCK_MAX_LOADS;
+    truckFill.scale.y = 1 + fillT * 8;
+    truckFill.position.y = 1.25 + (truckFill.scale.y - 1) * 0.05;
+    return true;
+  }
+
+  // ---------- Impact effects: dust puffs + a small camera punch ----------
+  var dust = [];
+  function spawnDust(x, y, z) {
+    for (var i = 0; i < 10; i++) {
+      var m = new THREE.Mesh(
+        new THREE.IcosahedronGeometry(0.28 + Math.random() * 0.22, 0),
+        new THREE.MeshBasicMaterial({ color: 0xE9C989, transparent: true, opacity: 0.85 })
+      );
+      m.position.set(x + (Math.random() - 0.5) * 1.4, y + Math.random() * 0.3, z + (Math.random() - 0.5) * 1.4);
+      m.userData.vy = 1.2 + Math.random() * 1.8;
+      m.userData.life = 0;
+      scene.add(m);
+      dust.push(m);
+    }
+  }
+  var camPunch = 0;
+  function updateDust(dt) {
+    for (var i = dust.length - 1; i >= 0; i--) {
+      var d = dust[i];
+      d.userData.life += dt;
+      d.position.y += d.userData.vy * dt;
+      d.userData.vy -= 2.2 * dt;
+      d.scale.setScalar(1 + d.userData.life * 1.6);
+      d.material.opacity = Math.max(0, 0.85 - d.userData.life * 1.3);
+      if (d.userData.life > 0.65) {
+        scene.remove(d);
+        dust.splice(i, 1);
+      }
+    }
+  }
+
+  var POSE_IDLE = { boom: -0.15, dipper: -0.6, bucket: 0.4 };
+  var POSE_REACH = { boom: 0.55, dipper: -1.9, bucket: 0.3 };
+  var POSE_SCOOP = { boom: 0.35, dipper: -1.1, bucket: -1.5 };
+  var POSE_LIFT = { boom: -0.35, dipper: -0.5, bucket: -1.3 };
+  var POSE_DUMP = { boom: -0.35, dipper: -0.5, bucket: 0.9 };
+
+  function applyPose(p) {
+    boomPivot.rotation.z = p.boom;
+    dipperPivot.rotation.z = p.dipper;
+    bucketPivot.rotation.z = p.bucket;
+  }
+  applyPose(POSE_IDLE);
+
+  var debris = [];
+  var debrisGeo = new THREE.BoxGeometry(0.35, 0.35, 0.35);
+  function spawnDirt(x, y, z) {
+    var m = new THREE.Mesh(debrisGeo, new THREE.MeshLambertMaterial({ color: 0xB98A4E }));
+    m.position.set(x + (Math.random() - 0.5) * 0.6, y, z + (Math.random() - 0.5) * 0.6);
+    m.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, 0);
+    m.userData.vy = 1.5 + Math.random() * 1.5;
+    m.userData.settled = false;
+    m.castShadow = true;
+    scene.add(m);
+    debris.push(m);
+    if (debris.length > 140) {
+      var old = debris.shift();
+      scene.remove(old);
+    }
+  }
+
+  // ---------- Drive + dig state machine ----------
+  // Full 360-degree movement: Left/Right turn the JCB in place, Up drives it
+  // forward along whatever direction it's currently facing, Down digs.
+  var FIELD_HALF = GROUND_SIZE / 2 - 4;
+  var driveSpeed = 7.5;    // units/sec
+  var turnSpeed = 2.0;     // radians/sec
+  var wheelSpinSpeed = 6;
+  var input = { turnLeft: false, turnRight: false, forward: false };
+  var digPhase = 'idle';
+  var phaseT = 0;
+  var hintEl = document.getElementById('hint');
+  var hintShown = true;
+
+  var PHASE_DURATIONS = { reach: 0.45, scoop: 0.35, lift: 0.4, dump: 0.35, ['return']: 0.5 };
+
+  function startDig() {
+    if (digPhase !== 'idle') return;
+    digPhase = 'reach';
+    phaseT = 0;
+    if (hintShown) { hintEl.style.opacity = '0'; hintShown = false; }
+  }
+
+  function lerp(a, b, t) { return a + (b - a) * t; }
+  function lerpPose(a, b, t, out) {
+    out.boom = lerp(a.boom, b.boom, t);
+    out.dipper = lerp(a.dipper, b.dipper, t);
+    out.bucket = lerp(a.bucket, b.bucket, t);
+  }
+  var _tmpPose = { boom: 0, dipper: 0, bucket: 0 };
+
+  function updateDig(dt) {
+    if (digPhase === 'idle') return;
+    phaseT += dt;
+    var dur = PHASE_DURATIONS[digPhase];
+    var t = Math.min(1, phaseT / dur);
+    var ease = t * t * (3 - 2 * t);
+
+    if (digPhase === 'reach') {
+      lerpPose(POSE_IDLE, POSE_REACH, ease, _tmpPose);
+      applyPose(_tmpPose);
+      if (t >= 1) { digPhase = 'scoop'; phaseT = 0; }
+    } else if (digPhase === 'scoop') {
+      lerpPose(POSE_REACH, POSE_SCOOP, ease, _tmpPose);
+      applyPose(_tmpPose);
+      if (t >= 1) {
+        var bucketWorld = new THREE.Vector3();
+        bucket.getWorldPosition(bucketWorld);
+        digAt(bucketWorld.x, bucketWorld.z, 2.1, 1.1);
+        spawnDust(bucketWorld.x, bucketWorld.y, bucketWorld.z);
+        playThud();
+        addScore(10);
+        camPunch = 0.18;
+        digPhase = 'lift'; phaseT = 0;
+      }
+    } else if (digPhase === 'lift') {
+      lerpPose(POSE_SCOOP, POSE_LIFT, ease, _tmpPose);
+      applyPose(_tmpPose);
+      if (t >= 1) { digPhase = 'dump'; phaseT = 0; }
+    } else if (digPhase === 'dump') {
+      lerpPose(POSE_LIFT, POSE_DUMP, ease, _tmpPose);
+      applyPose(_tmpPose);
+      if (Math.abs(t - 0.3) < 0.06 && !dumpingSpawned) {
+        dumpingSpawned = true;
+        var bw = new THREE.Vector3();
+        bucket.getWorldPosition(bw);
+        var loadedTruck = tryLoadTruck(bw.x, bw.z);
+        if (loadedTruck) {
+          playClink();
+          celebrate(20);
+        } else {
+          for (var k = 0; k < 8; k++) spawnDirt(bw.x, bw.y, bw.z);
+        }
+      }
+      if (t >= 1) { digPhase = 'return'; phaseT = 0; dumpingSpawned = false; }
+    } else if (digPhase === 'return') {
+      lerpPose(POSE_DUMP, POSE_IDLE, ease, _tmpPose);
+      applyPose(_tmpPose);
+      if (t >= 1) { digPhase = 'idle'; phaseT = 0; }
+    }
+  }
+  var dumpingSpawned = false;
+
+  function updateDrive(dt) {
+    if (input.turnLeft) jcb.rotation.y += turnSpeed * dt;
+    if (input.turnRight) jcb.rotation.y -= turnSpeed * dt;
+
+    setEngineRunning(input.forward);
+    if (input.forward) {
+      var dx = Math.cos(jcb.rotation.y) * driveSpeed * dt;
+      var dz = -Math.sin(jcb.rotation.y) * driveSpeed * dt;
+      jcb.position.x = Math.max(-FIELD_HALF, Math.min(FIELD_HALF, jcb.position.x + dx));
+      jcb.position.z = Math.max(-FIELD_HALF, Math.min(FIELD_HALF, jcb.position.z + dz));
+      wheels.forEach(function (w) { w.rotation.x -= wheelSpinSpeed * dt; });
+    }
+  }
+
+  // ---------- Camera: fixed viewing direction, always. It does NOT orbit or
+  // turn with the JCB -- it only ever translates to keep the JCB in frame
+  // from the same constant compass angle. Turning the JCB spins the vehicle
+  // under a camera that never rotates, so the view is always stable and
+  // never swings around behind it. Only distance/height change (eased in
+  // closer while digging, so the arm and bucket are easy to watch). ----------
+  var camTarget = new THREE.Vector3();
+  var CHASE_DIST = 12, CHASE_HEIGHT = 6.5;
+  var DIG_CAM_DIST = 7, DIG_CAM_HEIGHT = 3.8;
+  var digCamBlend = 0;
+  var CAM_DIR = new THREE.Vector3(-1, 0, 0.35).normalize(); // fixed world-space direction, never changes
+  function updateCamera(dt) {
+    var wantDigCam = digPhase !== 'idle' ? 1 : 0;
+    digCamBlend += (wantDigCam - digCamBlend) * Math.min(1, dt * 3.5);
+
+    var dist = lerp(CHASE_DIST, DIG_CAM_DIST, digCamBlend);
+    var height = lerp(CHASE_HEIGHT, DIG_CAM_HEIGHT, digCamBlend);
+    var desired = jcb.position.clone()
+      .add(CAM_DIR.clone().multiplyScalar(dist))
+      .add(new THREE.Vector3(0, height, 0));
+    camera.position.lerp(desired, Math.min(1, dt * 4));
+    if (camPunch > 0) {
+      camera.position.y -= camPunch * 1.2;
+      camPunch = Math.max(0, camPunch - dt);
+    }
+
+    var bucketWorld = new THREE.Vector3();
+    bucket.getWorldPosition(bucketWorld);
+    var lookPoint = jcb.position.clone().add(new THREE.Vector3(0, 1.2, 0)).lerp(bucketWorld, digCamBlend * 0.7);
+    camTarget.lerp(lookPoint, Math.min(1, dt * 4));
+    camera.lookAt(camTarget);
+    sun.target.position.copy(jcb.position);
+  }
+
+  function updateDebris(dt) {
+    for (var i = 0; i < debris.length; i++) {
+      var d = debris[i];
+      if (d.userData.settled) continue;
+      d.userData.vy -= 9.8 * dt;
+      d.position.y += d.userData.vy * dt;
+      d.rotation.x += dt * 2;
+      if (d.position.y <= 0.18) {
+        d.position.y = 0.18;
+        d.userData.settled = true;
+      }
+    }
+  }
+
+  // ---------- Intro / title screen ----------
+  // The game doesn't actually start (no input drives the JCB) until the
+  // player presses Play, or -- since this is meant to be forgiving for a
+  // young child on a TV remote -- presses any button at all while the title
+  // screen is showing. Either way, that's the user gesture that also unlocks
+  // audio, so the happy start jingle is guaranteed to actually play.
+  var gameStarted = false;
+  var introScreen = document.getElementById('introScreen');
+  var introTitleEl = document.getElementById('introTitle');
+  var playButtonWrap = document.getElementById('playButtonWrap');
+
+  setTimeout(function () { introTitleEl.classList.add('show'); }, 250);
+  setTimeout(function () { playButtonWrap.classList.add('show'); }, 1300);
+
+  function startGame() {
+    if (gameStarted) return;
+    gameStarted = true;
+    ensureAudio();
+    playStartFanfare();
+    introScreen.classList.add('hidden');
+  }
+  document.getElementById('playButton').addEventListener('pointerdown', function (e) {
+    e.preventDefault();
+    startGame();
+  });
+
+  // ---------- Input: keyboard now, same shape the Android build will feed
+  // from D-pad KeyEvents (DPAD_UP/LEFT/RIGHT/DOWN). ----------
+  window.addEventListener('keydown', function (e) {
+    if (!gameStarted) { startGame(); return; }
+    if (e.key === 'ArrowLeft') input.turnLeft = true;
+    else if (e.key === 'ArrowRight') input.turnRight = true;
+    else if (e.key === 'ArrowUp') input.forward = true;
+    else if (e.key === 'ArrowDown' || e.key === ' ') { if (!e.repeat) startDig(); }
+  });
+  window.addEventListener('keyup', function (e) {
+    if (e.key === 'ArrowLeft') input.turnLeft = false;
+    else if (e.key === 'ArrowRight') input.turnRight = false;
+    else if (e.key === 'ArrowUp') input.forward = false;
+  });
+
+  // Hook Android will call directly from D-pad KeyEvents.
+  window.JCB = {
+    setTurn: function (dir) { // -1 left, 0 stop, 1 right
+      if (!gameStarted) { startGame(); return; }
+      input.turnLeft = dir < 0;
+      input.turnRight = dir > 0;
+    },
+    setForward: function (on) {
+      if (!gameStarted) { startGame(); return; }
+      input.forward = !!on;
+    },
+    dig: function () {
+      if (!gameStarted) { startGame(); return; }
+      startDig();
+    }
+  };
+
+  // On-screen D-pad, for previewing in a browser with no keyboard/remote.
+  function bindHold(id, onPress, onRelease) {
+    var el = document.getElementById(id);
+    el.addEventListener('pointerdown', function (e) { e.preventDefault(); onPress(); });
+    el.addEventListener('pointerup', function (e) { e.preventDefault(); onRelease(); });
+    el.addEventListener('pointercancel', function (e) { e.preventDefault(); onRelease(); });
+    el.addEventListener('pointerleave', function (e) { e.preventDefault(); onRelease(); });
+  }
+  bindHold('btnUp', function () { window.JCB.setForward(true); }, function () { window.JCB.setForward(false); });
+  bindHold('btnLeft', function () { window.JCB.setTurn(-1); }, function () { window.JCB.setTurn(0); });
+  bindHold('btnRight', function () { window.JCB.setTurn(1); }, function () { window.JCB.setTurn(0); });
+  document.getElementById('btnDig').addEventListener('pointerdown', function (e) {
+    e.preventDefault();
+    window.JCB.dig();
+  });
+
+  // ---------- Main loop ----------
+  var last = performance.now();
+  function frame(now) {
+    var dt = Math.min(0.05, (now - last) / 1000);
+    last = now;
+    updateDrive(dt);
+    updateDig(dt);
+    updateRams();
+    updateLoaderArm(dt);
+    setServoRunning(digPhase !== 'idle');
+    updateCamera(dt);
+    updateDebris(dt);
+    updateDust(dt);
+    renderer.render(scene, camera);
+    requestAnimationFrame(frame);
+  }
+  updateCamera(1);
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
