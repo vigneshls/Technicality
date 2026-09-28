@@ -309,11 +309,13 @@
 
   var camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 400);
 
-  var renderer = new THREE.WebGLRenderer({ antialias: true });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+  // Kept deliberately light: the Mi TV 4X's GPU is weak, and real-time
+  // shadow mapping plus MSAA and supersampling were making the whole scene
+  // stutter on real hardware. Flat shading + no shadows costs almost nothing
+  // by comparison and the game is still perfectly readable without them.
+  var renderer = new THREE.WebGLRenderer({ antialias: false, stencil: false });
+  renderer.setPixelRatio(1);
   renderer.setSize(window.innerWidth, window.innerHeight);
-  renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   stage.appendChild(renderer.domElement);
 
   window.addEventListener('resize', function () {
@@ -334,6 +336,12 @@
       try {
         audioCtx = new (window.AudioContext || window.webkitAudioContext)();
       } catch (e) { audioCtx = null; }
+    }
+    // Some WebViews create the context already suspended even inside a real
+    // user-gesture handler; resuming explicitly is harmless if it was
+    // already running, and is exactly what unlocks it when it wasn't.
+    if (audioCtx && audioCtx.state === 'suspended') {
+      try { audioCtx.resume(); } catch (e) { /* ignore */ }
     }
     if (audioCtx && !ambientStarted) {
       ambientStarted = true;
@@ -598,18 +606,13 @@
   // ---------- Lights ----------
   var ambient = new THREE.HemisphereLight(0xffffff, 0xd9b476, 0.85);
   scene.add(ambient);
+  // No shadow map here on purpose -- it was the single biggest cost on the
+  // TV's weak GPU. Every mesh below still sets castShadow/receiveShadow;
+  // those are harmless no-ops with the renderer's shadow map off, so if a
+  // faster device ever runs this, turning renderer.shadowMap.enabled back
+  // on is the only change needed to get shadows back.
   var sun = new THREE.DirectionalLight(0xfff2d6, 1.0);
   sun.position.set(45, 60, 30);
-  sun.castShadow = true;
-  sun.shadow.mapSize.set(1536, 1536);
-  var SHADOW_SPAN = 70;
-  sun.shadow.camera.left = -SHADOW_SPAN;
-  sun.shadow.camera.right = SHADOW_SPAN;
-  sun.shadow.camera.top = SHADOW_SPAN;
-  sun.shadow.camera.bottom = -SHADOW_SPAN;
-  sun.shadow.camera.near = 10;
-  sun.shadow.camera.far = 180;
-  sun.shadow.bias = -0.0015;
   scene.add(sun);
   scene.add(sun.target);
 
@@ -736,8 +739,12 @@
   var CHROME = 0xD8D8D8;
   var GLASS = 0x9FE3F0;
 
-  function paintMat(color) { return new THREE.MeshPhongMaterial({ color: color, shininess: 55, specular: 0x554422 }); }
-  function metalMat(color) { return new THREE.MeshPhongMaterial({ color: color, shininess: 90, specular: 0x888888 }); }
+  // Lambert everywhere -- Phong's per-pixel specular lighting was extra cost
+  // across dozens of meshes for a shine effect the weak TV GPU couldn't
+  // afford. Lambert still shades correctly with the scene's lights, just
+  // without a glossy highlight.
+  function paintMat(color) { return new THREE.MeshLambertMaterial({ color: color }); }
+  function metalMat(color) { return new THREE.MeshLambertMaterial({ color: color }); }
   function matteMat(color) { return new THREE.MeshLambertMaterial({ color: color }); }
 
   var jcb = new THREE.Group();
@@ -1098,7 +1105,7 @@
   // ---------- Impact effects: dust puffs + a small camera punch ----------
   var dust = [];
   function spawnDust(x, y, z) {
-    for (var i = 0; i < 10; i++) {
+    for (var i = 0; i < 6; i++) {
       var m = new THREE.Mesh(
         new THREE.IcosahedronGeometry(0.28 + Math.random() * 0.22, 0),
         new THREE.MeshBasicMaterial({ color: 0xE9C989, transparent: true, opacity: 0.85 })
@@ -1150,7 +1157,7 @@
     m.castShadow = true;
     scene.add(m);
     debris.push(m);
-    if (debris.length > 140) {
+    if (debris.length > 50) {
       var old = debris.shift();
       scene.remove(old);
     }
@@ -1226,7 +1233,7 @@
           playClink();
           celebrate(20);
         } else {
-          for (var k = 0; k < 8; k++) spawnDirt(bw.x, bw.y, bw.z);
+          for (var k = 0; k < 5; k++) spawnDirt(bw.x, bw.y, bw.z);
         }
       }
       if (t >= 1) { digPhase = 'return'; phaseT = 0; dumpingSpawned = false; }
