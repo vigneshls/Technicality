@@ -123,6 +123,7 @@
   .dbtn.left { grid-column: 1; grid-row: 2; }
   .dbtn.right { grid-column: 3; grid-row: 2; }
   .dbtn.down { grid-column: 2; grid-row: 3; background: #FFC530; }
+  .dbtn.center { grid-column: 2; grid-row: 2; background: #7ED957; font-size: 15px; }
 
   .scoreHud {
     position: fixed;
@@ -283,8 +284,9 @@
   <span class="key">◀</span><span class="key">▶</span> Turn
   <span class="key" style="margin-left:8px">▲</span> Drive
   <span class="key" style="margin-left:8px">▼</span> Dig
+  <span class="key" style="margin-left:8px">OK</span> Loader
 </div>
-<div class="hint" id="hint">▲ drive · ◀ ▶ turn · ▼ dig</div>
+<div class="hint" id="hint">▲ drive · ◀ ▶ turn · ▼ dig · OK loader arm</div>
 <div class="hud" id="loadsHud" style="left:auto;right:16px;top:max(58px, calc(env(safe-area-inset-top, 0px) + 58px));display:none;">🚛 Loads: <span id="loadsCount">0</span></div>
 <div class="scoreHud" id="scoreHud">⭐ Score: <span id="scoreValue">0</span></div>
 <div id="confettiLayer"></div>
@@ -292,6 +294,7 @@
 <div class="dpad">
   <button class="dbtn up" id="btnUp" aria-label="Drive forward">▲</button>
   <button class="dbtn left" id="btnLeft" aria-label="Turn left">◀</button>
+  <button class="dbtn center" id="btnCenter" aria-label="Loader arm">OK</button>
   <button class="dbtn right" id="btnRight" aria-label="Turn right">▶</button>
   <button class="dbtn down" id="btnDig" aria-label="Dig">▼</button>
 </div>
@@ -464,6 +467,41 @@
     clackOsc.connect(clackGain).connect(audioCtx.destination);
     clackOsc.start(t0 + 0.01);
     clackOsc.stop(t0 + 0.12);
+  }
+
+  // Water splash -- a filtered noise burst sweeping down in pitch for the
+  // body of the splash, plus a few bright high "droplet" pings on top.
+  function playSplash() {
+    if (!audioCtx) return;
+    var t0 = audioCtx.currentTime;
+    var bufSize = audioCtx.sampleRate * 0.32;
+    var buf = audioCtx.createBuffer(1, bufSize, audioCtx.sampleRate);
+    var data = buf.getChannelData(0);
+    for (var i = 0; i < bufSize; i++) data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / bufSize, 1.5);
+    var noise = audioCtx.createBufferSource();
+    noise.buffer = buf;
+    var filter = audioCtx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.setValueAtTime(2200, t0);
+    filter.frequency.exponentialRampToValueAtTime(500, t0 + 0.3);
+    filter.Q.value = 0.8;
+    var gain = audioCtx.createGain();
+    gain.gain.setValueAtTime(0.32, t0);
+    gain.gain.exponentialRampToValueAtTime(0.001, t0 + 0.3);
+    noise.connect(filter).connect(gain).connect(audioCtx.destination);
+    noise.start(t0);
+
+    [1900, 2600, 3300].forEach(function (freq, idx) {
+      var osc = audioCtx.createOscillator();
+      var g = audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      g.gain.setValueAtTime(0.06, t0 + idx * 0.05);
+      g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.16 + idx * 0.05);
+      osc.connect(g).connect(audioCtx.destination);
+      osc.start(t0 + idx * 0.05);
+      osc.stop(t0 + 0.2 + idx * 0.05);
+    });
   }
 
   function playClink() {
@@ -675,6 +713,27 @@
       groundGeo.computeVertexNormals();
     }
     return dugAny;
+  }
+
+  // ---------- Digging the same spot 3 times strikes water ----------
+  // Tracked per grid cell (not per exact dig position) so "the same spot"
+  // means the same rough patch of ground, matching how a child will
+  // actually re-dig by eye rather than pixel-perfect repositioning.
+  var DIG_CELL_SIZE = 3;
+  var digCellCounts = {};
+  var waterPools = {};
+  function digCellKey(x, z) {
+    return Math.round(x / DIG_CELL_SIZE) + ',' + Math.round(z / DIG_CELL_SIZE);
+  }
+  function spawnWaterPool(x, z) {
+    var pool = new THREE.Mesh(
+      new THREE.CircleGeometry(1.7, 20),
+      new THREE.MeshLambertMaterial({ color: 0x4FA8D8, transparent: true, opacity: 0.88 })
+    );
+    pool.rotation.x = -Math.PI / 2;
+    pool.position.set(x, -3.25, z);
+    scene.add(pool);
+    return pool;
   }
 
   // ---------- Scenery ----------
@@ -944,15 +1003,63 @@
     frontBucket.add(fTooth);
   }
 
-  var LOADER_IDLE = { lift: 0, tilt: 0 };
-  var LOADER_ACTIVE = { lift: 0.42, tilt: 0.65 };
-  var loaderBlend = 0;
-  function updateLoaderArm(dt) {
-    var want = digPhase !== 'idle' ? 1 : 0;
-    loaderBlend += (want - loaderBlend) * Math.min(1, dt * 3);
-    loaderLift.rotation.z = lerp(LOADER_IDLE.lift, LOADER_ACTIVE.lift, loaderBlend);
-    loaderTilt.rotation.z = lerp(LOADER_IDLE.tilt, LOADER_ACTIVE.tilt, loaderBlend);
+  // The loader arm ("the back hand") has its own independent action now,
+  // triggered by the D-pad center button, on its own timeline -- separate
+  // from the rear digging arm on the down button, so both ends of the
+  // machine are actually operable rather than one just following the other.
+  var LOADER_POSE_IDLE = { lift: 0, tilt: 0 };
+  var LOADER_POSE_LIFT = { lift: 0.5, tilt: 0.1 };
+  var LOADER_POSE_DUMP = { lift: 0.5, tilt: 0.95 };
+  var LOADER_PHASE_DURATIONS = { lift: 0.4, dump: 0.35, ['return']: 0.45 };
+  var loaderPhase = 'idle';
+  var loaderPhaseT = 0;
+
+  function startLoaderAction() {
+    if (loaderPhase !== 'idle') return; // can't restart mid-swing -- same debounce style as the dig arm
+    loaderPhase = 'lift';
+    loaderPhaseT = 0;
   }
+
+  function applyLoaderPose(p) {
+    loaderLift.rotation.z = p.lift;
+    loaderTilt.rotation.z = p.tilt;
+  }
+  var _tmpLoaderPose = { lift: 0, tilt: 0 };
+  function lerpLoaderPose(a, b, t, out) {
+    out.lift = lerp(a.lift, b.lift, t);
+    out.tilt = lerp(a.tilt, b.tilt, t);
+  }
+
+  function updateLoaderArm(dt) {
+    if (loaderPhase === 'idle') return;
+    loaderPhaseT += dt;
+    var dur = LOADER_PHASE_DURATIONS[loaderPhase];
+    var t = Math.min(1, loaderPhaseT / dur);
+    var ease = t * t * (3 - 2 * t);
+
+    if (loaderPhase === 'lift') {
+      lerpLoaderPose(LOADER_POSE_IDLE, LOADER_POSE_LIFT, ease, _tmpLoaderPose);
+      applyLoaderPose(_tmpLoaderPose);
+      if (t >= 1) { loaderPhase = 'dump'; loaderPhaseT = 0; }
+    } else if (loaderPhase === 'dump') {
+      lerpLoaderPose(LOADER_POSE_LIFT, LOADER_POSE_DUMP, ease, _tmpLoaderPose);
+      applyLoaderPose(_tmpLoaderPose);
+      if (t >= 0.4 && !loaderDumpSpawned) {
+        loaderDumpSpawned = true;
+        var fw = new THREE.Vector3();
+        frontBucket.getWorldPosition(fw);
+        spawnDust(fw.x, fw.y, fw.z);
+        playClink();
+        addScore(5);
+      }
+      if (t >= 1) { loaderPhase = 'return'; loaderPhaseT = 0; loaderDumpSpawned = false; }
+    } else if (loaderPhase === 'return') {
+      lerpLoaderPose(LOADER_POSE_DUMP, LOADER_POSE_IDLE, ease, _tmpLoaderPose);
+      applyLoaderPose(_tmpLoaderPose);
+      if (t >= 1) { loaderPhase = 'idle'; loaderPhaseT = 0; }
+    }
+  }
+  var loaderDumpSpawned = false;
 
   // Rear stabilizer legs, by the working (digging) end -- a real backhoe
   // drops these to brace itself before digging. Static here, purely for silhouette.
@@ -1009,7 +1116,10 @@
   }
 
   // ---------- Dump truck: parked target for loading dug sand ----------
-  var TRUCK_POS = { x: 30, z: -18 };
+  // Close enough to spawn, and roughly straight ahead of the JCB's starting
+  // heading, that driving forward from the very start brings it into view --
+  // no hunting around the field required to find it.
+  var TRUCK_POS = { x: 16, z: 4 };
   var TRUCK_MAX_LOADS = 6;
   var truckLoads = 0;
   var loadsHud = document.getElementById('loadsHud');
@@ -1103,20 +1213,25 @@
   }
 
   // ---------- Impact effects: dust puffs + a small camera punch ----------
+  // Also reused for the water splash when digging breaks through to the
+  // water table -- same rise-and-fade particle behavior, just blue,
+  // higher, and more of them, for a proper splash instead of a dust puff.
   var dust = [];
-  function spawnDust(x, y, z) {
-    for (var i = 0; i < 6; i++) {
+  function spawnParticleBurst(x, y, z, color, count, launchSpeed) {
+    for (var i = 0; i < count; i++) {
       var m = new THREE.Mesh(
-        new THREE.IcosahedronGeometry(0.28 + Math.random() * 0.22, 0),
-        new THREE.MeshBasicMaterial({ color: 0xE9C989, transparent: true, opacity: 0.85 })
+        new THREE.IcosahedronGeometry(0.22 + Math.random() * 0.2, 0),
+        new THREE.MeshBasicMaterial({ color: color, transparent: true, opacity: 0.9 })
       );
       m.position.set(x + (Math.random() - 0.5) * 1.4, y + Math.random() * 0.3, z + (Math.random() - 0.5) * 1.4);
-      m.userData.vy = 1.2 + Math.random() * 1.8;
+      m.userData.vy = launchSpeed + Math.random() * launchSpeed;
       m.userData.life = 0;
       scene.add(m);
       dust.push(m);
     }
   }
+  function spawnDust(x, y, z) { spawnParticleBurst(x, y, z, 0xE9C989, 6, 1.2); }
+  function spawnSplash(x, y, z) { spawnParticleBurst(x, y, z, 0x5FB6EE, 12, 2.4); }
   var camPunch = 0;
   function updateDust(dt) {
     for (var i = dust.length - 1; i >= 0; i--) {
@@ -1210,10 +1325,28 @@
       if (t >= 1) {
         var bucketWorld = new THREE.Vector3();
         bucket.getWorldPosition(bucketWorld);
-        digAt(bucketWorld.x, bucketWorld.z, 2.1, 1.1);
-        spawnDust(bucketWorld.x, bucketWorld.y, bucketWorld.z);
-        playThud();
-        addScore(10);
+        var cellKey = digCellKey(bucketWorld.x, bucketWorld.z);
+        var digCount = digCellCounts[cellKey] || 0;
+
+        if (digCount < 3) {
+          digCount++;
+          digCellCounts[cellKey] = digCount;
+          digAt(bucketWorld.x, bucketWorld.z, 2.1, 1.1 * digCount); // deeper each repeat dig at the same spot
+          spawnDust(bucketWorld.x, bucketWorld.y, bucketWorld.z);
+          playThud();
+          addScore(10);
+          if (digCount === 3) {
+            // Third dig in the same spot strikes water.
+            waterPools[cellKey] = spawnWaterPool(bucketWorld.x, bucketWorld.z);
+            spawnSplash(bucketWorld.x, -3.1, bucketWorld.z);
+            playSplash();
+            addScore(15);
+          }
+        } else {
+          // Already hit water here -- no more digging, just a splash.
+          spawnSplash(bucketWorld.x, -3.1, bucketWorld.z);
+          playSplash();
+        }
         camPunch = 0.18;
         digPhase = 'lift'; phaseT = 0;
       }
@@ -1334,13 +1467,15 @@
   });
 
   // ---------- Input: keyboard now, same shape the Android build will feed
-  // from D-pad KeyEvents (DPAD_UP/LEFT/RIGHT/DOWN). ----------
+  // from D-pad KeyEvents (DPAD_UP/LEFT/RIGHT/DOWN, plus DPAD_CENTER/ENTER
+  // for the loader arm -- most WebViews map DPAD_CENTER to "Enter"). ----------
   window.addEventListener('keydown', function (e) {
     if (!gameStarted) { startGame(); return; }
     if (e.key === 'ArrowLeft') input.turnLeft = true;
     else if (e.key === 'ArrowRight') input.turnRight = true;
     else if (e.key === 'ArrowUp') input.forward = true;
     else if (e.key === 'ArrowDown' || e.key === ' ') { if (!e.repeat) startDig(); }
+    else if (e.key === 'Enter') { if (!e.repeat) startLoaderAction(); }
   });
   window.addEventListener('keyup', function (e) {
     if (e.key === 'ArrowLeft') input.turnLeft = false;
@@ -1362,6 +1497,10 @@
     dig: function () {
       if (!gameStarted) { startGame(); return; }
       startDig();
+    },
+    loaderAction: function () {
+      if (!gameStarted) { startGame(); return; }
+      startLoaderAction();
     }
   };
 
@@ -1379,6 +1518,10 @@
   document.getElementById('btnDig').addEventListener('pointerdown', function (e) {
     e.preventDefault();
     window.JCB.dig();
+  });
+  document.getElementById('btnCenter').addEventListener('pointerdown', function (e) {
+    e.preventDefault();
+    window.JCB.loaderAction();
   });
 
   // ---------- Main loop ----------
