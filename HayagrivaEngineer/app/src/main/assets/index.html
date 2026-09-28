@@ -17,6 +17,7 @@
     font-weight: 700;
     src: url('fonts/fredoka-latin.woff2') format('woff2');
   }
+
   :root { color-scheme: dark; }
   html, body {
     height: 100%;
@@ -260,9 +261,9 @@
     opacity: 0.85;
   }
 </style>
+
 </head>
 <body>
-
 <div id="stage"></div>
 
 <div id="introScreen">
@@ -719,21 +720,70 @@
   // Tracked per grid cell (not per exact dig position) so "the same spot"
   // means the same rough patch of ground, matching how a child will
   // actually re-dig by eye rather than pixel-perfect repositioning.
+  //
+  // Once water is struck, digging that same cell again grows the pool
+  // (bigger, not deeper -- the ground itself already maxed out at 3 digs).
+  // And after every dig anywhere, water checks its immediate neighbor cells:
+  // any neighbor that has ALSO been dug (even just once) gets flooded too --
+  // so digging a connected trench toward a water cell makes the water
+  // visibly travel along that dug path, rather than staying a single
+  // isolated puddle.
   var DIG_CELL_SIZE = 3;
   var digCellCounts = {};
-  var waterPools = {};
+  var waterCells = {}; // cellKey -> { mesh, level }
+  var WATER_COLOR = 0x2E86D8;
+  var WATER_BASE_RADIUS = 1.5;
+
   function digCellKey(x, z) {
     return Math.round(x / DIG_CELL_SIZE) + ',' + Math.round(z / DIG_CELL_SIZE);
   }
-  function spawnWaterPool(x, z) {
-    var pool = new THREE.Mesh(
-      new THREE.CircleGeometry(1.7, 20),
-      new THREE.MeshLambertMaterial({ color: 0x4FA8D8, transparent: true, opacity: 0.88 })
-    );
-    pool.rotation.x = -Math.PI / 2;
-    pool.position.set(x, -3.25, z);
-    scene.add(pool);
-    return pool;
+  function cellCenterWorld(key) {
+    var parts = key.split(',');
+    return { x: parseInt(parts[0], 10) * DIG_CELL_SIZE, z: parseInt(parts[1], 10) * DIG_CELL_SIZE };
+  }
+  function neighborCellKeys(key) {
+    var parts = key.split(',').map(Number);
+    var cx = parts[0], cz = parts[1];
+    return [(cx + 1) + ',' + cz, (cx - 1) + ',' + cz, cx + ',' + (cz + 1), cx + ',' + (cz - 1)];
+  }
+  function poolYForCell(key) {
+    var depth = 1.1 * Math.min(digCellCounts[key] || 0, 3);
+    return -depth + 0.06;
+  }
+
+  /** Creates the pool at a cell the first time, or grows it (bigger radius) every time after. */
+  function growWaterAt(key, worldX, worldZ) {
+    var cell = waterCells[key];
+    if (!cell) {
+      var mesh = new THREE.Mesh(
+        new THREE.CircleGeometry(WATER_BASE_RADIUS, 20),
+        new THREE.MeshLambertMaterial({ color: WATER_COLOR, transparent: true, opacity: 0.88 })
+      );
+      mesh.rotation.x = -Math.PI / 2;
+      mesh.position.set(worldX, poolYForCell(key), worldZ);
+      scene.add(mesh);
+      waterCells[key] = { mesh: mesh, level: 1 };
+    } else {
+      cell.level = Math.min(cell.level + 1, 6);
+      var scale = 1 + cell.level * 0.22;
+      cell.mesh.scale.set(scale, scale, 1);
+      cell.mesh.position.y = poolYForCell(key);
+    }
+  }
+
+  /** Lets water spread into any already-dug cell next to existing water. */
+  function propagateWaterAlongDugPath() {
+    var keys = Object.keys(waterCells);
+    for (var i = 0; i < keys.length; i++) {
+      var neighbors = neighborCellKeys(keys[i]);
+      for (var j = 0; j < neighbors.length; j++) {
+        var nk = neighbors[j];
+        if (!waterCells[nk] && (digCellCounts[nk] || 0) >= 1) {
+          var c = cellCenterWorld(nk);
+          growWaterAt(nk, c.x, c.z);
+        }
+      }
+    }
   }
 
   // ---------- Scenery ----------
@@ -1337,16 +1387,19 @@
           addScore(10);
           if (digCount === 3) {
             // Third dig in the same spot strikes water.
-            waterPools[cellKey] = spawnWaterPool(bucketWorld.x, bucketWorld.z);
-            spawnSplash(bucketWorld.x, -3.1, bucketWorld.z);
+            growWaterAt(cellKey, bucketWorld.x, bucketWorld.z);
+            spawnSplash(bucketWorld.x, poolYForCell(cellKey) + 0.2, bucketWorld.z);
             playSplash();
             addScore(15);
           }
         } else {
-          // Already hit water here -- no more digging, just a splash.
-          spawnSplash(bucketWorld.x, -3.1, bucketWorld.z);
+          // Already hit water here -- ground can't dig deeper, but the pool grows instead.
+          growWaterAt(cellKey, bucketWorld.x, bucketWorld.z);
+          spawnSplash(bucketWorld.x, poolYForCell(cellKey) + 0.2, bucketWorld.z);
           playSplash();
+          addScore(5);
         }
+        propagateWaterAlongDugPath(); // any already-dug neighbor cell gets flooded too
         camPunch = 0.18;
         digPhase = 'lift'; phaseT = 0;
       }
