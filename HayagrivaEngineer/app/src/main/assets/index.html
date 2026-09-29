@@ -679,11 +679,17 @@
   ground.receiveShadow = true;
   scene.add(ground);
 
+  // This solid block represents "the earth beneath the sand", and its top
+  // face has to sit BELOW the deepest a dig can ever go (3 digs * 1.1 =
+  // 3.3) or below wherever the water pools render, or it silently entombs
+  // both -- an opaque box's top face blocks the camera's view of anything
+  // sitting inside it, so the pit floor and any water in it were rendering
+  // fine but invisible, hidden behind/inside this block the whole time.
   var dirtBed = new THREE.Mesh(
-    new THREE.BoxGeometry(GROUND_SIZE, 4, GROUND_SIZE),
+    new THREE.BoxGeometry(GROUND_SIZE, 6, GROUND_SIZE),
     new THREE.MeshLambertMaterial({ color: 0x7a5230 })
   );
-  dirtBed.position.y = -2.3;
+  dirtBed.position.y = -8; // top face at -5, safely below max dig depth (-3.3) and every water pool
   scene.add(dirtBed);
 
   function digAt(worldX, worldZ, radius, depth) {
